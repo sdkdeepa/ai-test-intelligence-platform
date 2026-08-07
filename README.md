@@ -19,8 +19,11 @@ engineering sprints — not a tutorial or hackathon project.
 
 ## Status
 
-**Sprint 0 complete: architecture and system design.** No application code has been
-written yet. See below for the full design before any implementation begins.
+**Sprint 1 complete: repository scaffold and development foundation.** A running
+FastAPI backend (health endpoint, config, structured logging) and a React/Vite/TS
+frontend shell exist and are containerized. No business logic, providers, or analysis
+engines are implemented yet — see [Development Roadmap](docs/development-roadmap.md)
+for what's next.
 
 ## Documentation
 
@@ -32,12 +35,34 @@ written yet. See below for the full design before any implementation begins.
 - [Development Roadmap](docs/development-roadmap.md) — sprint sequencing and explicitly
   deferred decisions.
 
-## Stack (planned)
+## Stack
 
-- **Backend:** Python 3.12, FastAPI, SQLAlchemy 2.0, PostgreSQL
+- **Backend:** Python 3.12, FastAPI, Pydantic Settings, structlog
 - **Frontend:** React, TypeScript, Vite
-- **LLM providers:** Anthropic Claude (primary), OpenAI (secondary), Mock (test/CI)
-- **CI/CD:** GitHub Actions
+- **LLM providers:** Anthropic Claude (primary), OpenAI (secondary), Mock (test/CI) — not yet implemented (Sprint 3)
+- **Persistence:** PostgreSQL, SQLAlchemy 2.0 — not yet implemented (Sprint 2)
+- **CI/CD:** GitHub Actions — not yet implemented
+
+## Getting Started
+
+Requires Python 3.12+, Node 22+, and (optionally) Docker.
+
+```
+cp .env.example .env
+make install     # backend venv + dependencies, frontend npm dependencies
+make backend     # run the API at http://localhost:8000 (see /health)
+make frontend    # run the dashboard dev server (separate terminal)
+make test        # run backend tests
+```
+
+Or via Docker:
+
+```
+docker compose up --build
+```
+
+Backend serves on `:8000`, frontend on `:4173` when run via Docker (`:5173` under
+`npm run dev`).
 
 ## Working Agreement
 
