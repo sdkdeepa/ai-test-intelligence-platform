@@ -270,6 +270,22 @@ classDiagram
 - Every provider call is wrapped with retry/backoff and timeout handling at the registry
   boundary, not duplicated per engine.
 
+**Implementation status (Sprint 2):** `LLMProvider`, `PromptSpec`, `LLMResponse`,
+`MockProvider`, and `ProviderRegistry` are implemented in `backend/app/providers/`.
+Two scoping decisions worth recording:
+
+- The registry currently resolves *provider selection* per engine
+  (`risk_provider` / `generation_provider` / `triage_provider` config overrides), not
+  per-engine *model* selection. With only `MockProvider` registered, a model override
+  has no observable effect — that configuration surface is deferred until a second real
+  provider (Sprint 3) makes the triage-cheap/generation-strong distinction meaningful,
+  rather than building it against a provider that can't exercise it.
+- Retry/backoff/timeout wrapping is not yet implemented — `MockProvider` never makes a
+  network call, so there's nothing to retry against. This lands with the first real
+  provider integration in Sprint 3.
+
+`AnthropicProvider` and `OpenAIProvider` remain unimplemented, per Sprint 2 scope.
+
 ## 8. Observability Strategy
 
 - **Structured logging**: JSON logs carrying `repo_id`, `analysis_run_id`, and a
