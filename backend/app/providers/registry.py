@@ -1,6 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
+from app.providers.anthropic import AnthropicProvider
 from app.providers.base import LLMProvider
 from app.providers.config import ProviderSettings, get_provider_settings
 from app.providers.mock import MockProvider
@@ -20,6 +21,14 @@ class ProviderRegistry:
         self._providers: dict[str, LLMProvider] = {
             "mock": MockProvider(model=self._settings.default_model),
         }
+        if self._settings.anthropic_api_key is not None:
+            self._providers["anthropic"] = AnthropicProvider(
+                api_key=self._settings.anthropic_api_key.get_secret_value(),
+                model=self._settings.anthropic_model,
+                max_tokens=self._settings.anthropic_max_tokens,
+                timeout=self._settings.anthropic_timeout,
+                max_retries=self._settings.anthropic_max_retries,
+            )
 
     def register(self, provider: LLMProvider) -> None:
         """Add or replace a provider under its own name()."""

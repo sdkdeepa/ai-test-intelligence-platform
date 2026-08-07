@@ -55,3 +55,18 @@ def test_registering_a_provider_makes_it_resolvable():
     resolved = registry.get("generation")
 
     assert resolved.name() == "stub"
+
+
+def test_anthropic_not_registered_without_api_key():
+    registry = ProviderRegistry(ProviderSettings(default_provider="anthropic"))
+
+    with pytest.raises(ValueError, match="anthropic"):
+        registry.get("risk")
+
+
+def test_anthropic_registered_when_api_key_configured():
+    registry = ProviderRegistry(
+        ProviderSettings(default_provider="anthropic", anthropic_api_key="sk-test-not-real")
+    )
+
+    assert registry.get("risk").name() == "anthropic"

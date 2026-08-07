@@ -25,6 +25,7 @@ class LLMResponse(BaseModel):
     input_tokens: int
     output_tokens: int
     latency_ms: float
+    request_id: str | None = None
 
 
 class LLMProvider(ABC):

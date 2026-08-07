@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +18,14 @@ class ProviderSettings(BaseSettings):
     risk_provider: str | None = None
     generation_provider: str | None = None
     triage_provider: str | None = None
+
+    # Anthropic Claude provider. SecretStr keeps the key out of logs/reprs;
+    # it is never given a default other than None — no key, no provider.
+    anthropic_api_key: SecretStr | None = None
+    anthropic_model: str = "claude-sonnet-5"
+    anthropic_max_tokens: int = 1024
+    anthropic_timeout: float = 60.0
+    anthropic_max_retries: int = 2
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="PROVIDER_", extra="ignore")
 
