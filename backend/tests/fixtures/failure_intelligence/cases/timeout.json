@@ -1,0 +1,5 @@
+{
+  "ci_log": "Test run exceeded the configured timeout of 30s.\nTimeoutError: Timed out waiting for response from /api/v1/risk-analysis\n",
+  "stack_trace": "concurrent.futures.TimeoutError\n",
+  "test_name": "tests/api/test_risk_api.py::test_full_vertical_slice_from_trigger_to_findings"
+}

@@ -104,6 +104,23 @@ class TestResultRepository(BaseRepository[TestResult]):
             self.session.scalars(select(TestResult).where(TestResult.test_run_id == test_run_id))
         )
 
+    def list_by_test_case_chronological(self, test_case_id: uuid.UUID) -> list[TestResult]:
+        """Oldest-first, ordered by the owning TestRun's started_at.
+
+        TestResult itself carries no timestamp — the run it belongs to does
+        — so "recent" only means anything via this join. Used by
+        failure_intelligence/clustering.py for flaky/recurring-pattern
+        detection over a test case's history.
+        """
+        return list(
+            self.session.scalars(
+                select(TestResult)
+                .join(TestRun, TestResult.test_run_id == TestRun.id)
+                .where(TestResult.test_case_id == test_case_id)
+                .order_by(TestRun.started_at.asc())
+            )
+        )
+
 
 class LLMProviderConfigRepository(BaseRepository[LLMProviderConfig]):
     model = LLMProviderConfig
@@ -184,6 +201,18 @@ class FailureFindingRepository(BaseRepository[FailureFinding]):
                     FailureFinding.analysis_run_id == analysis_run_id,
                     FailureFinding.classification == classification,
                 )
+            )
+        )
+
+    def list_by_repo(self, repo_id: uuid.UUID) -> list[FailureFinding]:
+        """FailureFinding has no repo_id column (same as FlakyTestFinding —
+        neither is in system-design.md's ERD) — scoped via AnalysisRun instead.
+        """
+        return list(
+            self.session.scalars(
+                select(FailureFinding)
+                .join(AnalysisRun, FailureFinding.analysis_run_id == AnalysisRun.id)
+                .where(AnalysisRun.repo_id == repo_id)
             )
         )
 

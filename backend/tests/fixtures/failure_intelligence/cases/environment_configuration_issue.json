@@ -1,0 +1,5 @@
+{
+  "ci_log": "Starting integration tests...\npsycopg.OperationalError: could not connect to server: Connection refused\n\tIs the server running on host \"localhost\" and accepting TCP/IP connections on port 5432?\n",
+  "application_log": "CRITICAL app.persistence.database: DATABASE_URL environment variable not set, falling back to default\n",
+  "test_name": "tests/persistence/postgres/test_postgres_integration.py::test_repository_crud_round_trips"
+}

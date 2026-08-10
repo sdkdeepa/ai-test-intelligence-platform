@@ -6,6 +6,7 @@ HTTP layer later (a CLI, a worker process) without importing FastAPI.
 
 from functools import lru_cache
 
+from app.analysis.failure_intelligence.engine import FailureIntelligenceEngine
 from app.analysis.risk.engine import RiskEngine
 from app.analysis.test_intelligence.engine import TestIntelligenceEngine
 from app.orchestration.orchestrator import AnalysisOrchestrator
@@ -21,6 +22,9 @@ def get_orchestrator() -> AnalysisOrchestrator:
     registry.register(RiskEngine(provider_registry=get_provider_registry(), session_factory=SessionLocal))
     registry.register(
         TestIntelligenceEngine(provider_registry=get_provider_registry(), session_factory=SessionLocal)
+    )
+    registry.register(
+        FailureIntelligenceEngine(provider_registry=get_provider_registry(), session_factory=SessionLocal)
     )
 
     return AnalysisOrchestrator(

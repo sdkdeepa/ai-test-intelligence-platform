@@ -35,7 +35,7 @@ project's working agreement. Nothing past the current sprint is implemented by d
 | 5 | Risk Engine (first full vertical slice): ingestion → orchestration → risk analysis → persistence → API read endpoint | Sprint 4 |
 | 6 | CI integration test workflow (`integration.yml`) against dockerized Postgres | Sprint 5 |
 | 7 | Test Intelligence Engine | Sprint 5 |
-| 8 | Triage Engine + flaky-test clustering | Sprint 5 |
+| 8 | Failure Intelligence Engine + flaky-test clustering | Sprint 5 |
 | 9 | Frontend dashboard: repo overview + risk findings view | Sprint 5 |
 | 10 | GitHub PR integration: status checks, PR comments with findings | Sprints 5–8 |
 | 11 | Observability: structured logging, metrics endpoint, tracing | Ongoing, formalized once real traffic exists |

@@ -116,7 +116,7 @@ def test_failure_finding_list_by_classification(session):
     session.add(result)
     session.flush()
 
-    run = AnalysisRunRepository(session).add(AnalysisRun(repo_id=repo.id, trigger="ci", type="triage", status="pending"))
+    run = AnalysisRunRepository(session).add(AnalysisRun(repo_id=repo.id, trigger="ci", type="failure_intelligence", status="pending"))
     findings = FailureFindingRepository(session)
     regression = findings.add(
         FailureFinding(test_result_id=result.id, analysis_run_id=run.id, classification="regression")

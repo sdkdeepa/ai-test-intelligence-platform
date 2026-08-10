@@ -1,0 +1,4 @@
+{
+  "ci_log": "Test run finished with a non-zero exit code.\n",
+  "test_name": "tests/misc/test_unknown.py::test_something"
+}

@@ -3,8 +3,7 @@
 Mirrors the shape of `providers/base.py`: a small set of provider-agnostic —
 here, engine-agnostic — data contracts plus the interface itself. The
 orchestrator depends only on `AnalysisEngine`, never on a concrete Risk /
-Test Intelligence / Triage engine (none of which exist yet — this sprint is
-the interface and its plumbing only).
+Test Intelligence / Failure Intelligence engine.
 """
 
 import uuid
@@ -18,7 +17,7 @@ class AnalysisContext(BaseModel):
     """Everything an engine needs to run a single analysis, and nothing more.
 
     `inputs` carries engine-specific data (e.g. failed TestResults for
-    triage) without the orchestrator needing to know its shape — see
+    failure intelligence) without the orchestrator needing to know its shape — see
     system-design.md §5: "AnalysisContext carries the repo, commit/PR
     reference, and any engine-specific inputs."
     """
@@ -49,8 +48,8 @@ class AnalysisResult(BaseModel):
 
 
 class AnalysisEngine(ABC):
-    """Interface every analysis engine (Risk, Test Intelligence, Triage) must
-    implement. The orchestrator depends only on this interface — see
+    """Interface every analysis engine (Risk, Test Intelligence, Failure
+    Intelligence) must implement. The orchestrator depends only on this interface — see
     architecture.md §5: "The orchestrator decides *when* and *in what order*
     engines run; it has no analysis logic of its own."
     """

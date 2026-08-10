@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
+from app.analysis.failure_intelligence.engine import FailureIntelligenceEngine
 from app.analysis.risk.engine import RiskEngine
 from app.analysis.test_intelligence.engine import TestIntelligenceEngine
 from app.main import app
@@ -32,6 +33,9 @@ def client(tmp_path):
     registry = EngineRegistry()
     registry.register(RiskEngine(provider_registry=ProviderRegistry(), session_factory=session_factory))
     registry.register(TestIntelligenceEngine(provider_registry=ProviderRegistry(), session_factory=session_factory))
+    registry.register(
+        FailureIntelligenceEngine(provider_registry=ProviderRegistry(), session_factory=session_factory)
+    )
     orchestrator = AnalysisOrchestrator(
         registry=registry,
         task_queue=InProcessTaskQueue(),
@@ -48,6 +52,11 @@ def client(tmp_path):
 
     app.dependency_overrides[get_session] = _override_get_session
     app.dependency_overrides[get_orchestrator] = lambda: orchestrator
+
+    # Stashed for tests that need to seed data directly (e.g. historical
+    # TestResult rows for failure-intelligence clustering) against the same
+    # isolated DB the client's requests are served from.
+    app.state.session_factory = session_factory
 
     with TestClient(app) as test_client:
         yield test_client
