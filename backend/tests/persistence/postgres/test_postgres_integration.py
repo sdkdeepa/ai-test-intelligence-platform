@@ -106,15 +106,35 @@ def test_migration_creates_all_expected_tables(migrated_engine):
     assert EXPECTED_TABLES <= _public_tables(migrated_engine)
 
 
-def test_migration_downgrade_and_upgrade_round_trip(alembic_config, migrated_engine):
-    command.downgrade(alembic_config, "-1")
-    tables_after_downgrade = _public_tables(migrated_engine)
-    assert "llm_invocations" not in tables_after_downgrade
-    assert "failure_findings" not in tables_after_downgrade
-    assert "repositories" in tables_after_downgrade  # first migration's tables remain
+def _risk_finding_columns(engine) -> set[str]:
+    with engine.connect() as conn:
+        return {
+            row[0]
+            for row in conn.execute(
+                text("select column_name from information_schema.columns where table_name = 'risk_findings'")
+            )
+        }
 
-    command.upgrade(alembic_config, "head")  # restore head for the rest of the module
-    assert "llm_invocations" in _public_tables(migrated_engine)
+
+def test_migration_downgrade_and_upgrade_round_trip(alembic_config, migrated_engine):
+    """Downgrading one revision from head must remove exactly what the
+    latest migration added, and upgrading back must restore it. Checked
+    against whichever migration is actually last (via risk_findings'
+    `categories` column, added by the latest one) rather than a hardcoded
+    table name, so this doesn't go stale the next time a migration lands on
+    top — which is exactly what broke the original hardcoded version of
+    this test in Sprint 6. The upgrade-back-to-head runs in `finally` so a
+    failed assertion here can't leave the shared database downgraded for
+    every other test in this module.
+    """
+    try:
+        command.downgrade(alembic_config, "-1")
+        assert "categories" not in _risk_finding_columns(migrated_engine)
+        assert "repositories" in _public_tables(migrated_engine)  # first migration's tables remain
+    finally:
+        command.upgrade(alembic_config, "head")
+
+    assert "categories" in _risk_finding_columns(migrated_engine)
 
 
 def test_repository_crud_round_trips(session):

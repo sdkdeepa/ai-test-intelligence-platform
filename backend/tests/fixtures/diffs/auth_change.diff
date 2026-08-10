@@ -1,0 +1,15 @@
+diff --git a/app/auth/login.py b/app/auth/login.py
+index 1111111..2222222 100644
+--- a/app/auth/login.py
++++ b/app/auth/login.py
+@@ -10,8 +10,12 @@ def handle_login(username: str, password: str) -> str:
+     user = find_user(username)
+     if user is None:
+         raise ValueError("unknown user")
+-    if not check_password(user, password):
++    if not authenticate(user, password):
+         raise ValueError("invalid credentials")
+-    return issue_session(user)
++    access_token = issue_access_token(user)
++    refresh_token = issue_refresh_token(user)
++    return access_token, refresh_token

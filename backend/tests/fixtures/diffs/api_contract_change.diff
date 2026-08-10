@@ -1,0 +1,14 @@
+diff --git a/app/api/users.py b/app/api/users.py
+index 3333333..4444444 100644
+--- a/app/api/users.py
++++ b/app/api/users.py
+@@ -5,9 +5,9 @@ router = APIRouter(prefix="/api/v1/users")
+
+
+-@router.get("/{user_id}")
+-def get_user(user_id: str):
+-    return repo.get(user_id)
++@router.get("/{user_id}", response_model=UserOut)
++def get_user(user_id: str) -> UserOut:
++    user = repo.get(user_id)
++    return UserOut.model_validate(user)

@@ -1,0 +1,68 @@
+diff --git a/backend/app/analysis/risk/formatting.py b/backend/app/analysis/risk/formatting.py
+index 5151515..6262626 100644
+--- a/backend/app/analysis/risk/formatting.py
++++ b/backend/app/analysis/risk/formatting.py
+@@ -1,20 +1,20 @@
+-def fmt_item(x):
+-    lbl = x.get("lbl")
+-    val = x.get("val")
+-    return f"{lbl}: {val}"
++def format_item(entry):
++    label = entry.get("label")
++    value = entry.get("value")
++    return f"{label}: {value}"
+
+
+-def fmt_list(items):
+-    out = []
+-    for x in items:
+-        out.append(fmt_item(x))
+-    return out
++def format_list(entries):
++    formatted = []
++    for entry in entries:
++        formatted.append(format_item(entry))
++    return formatted
+
+
+-def fmt_table(rows):
+-    lines = []
+-    for r in rows:
+-        lines.append(", ".join(fmt_list(r)))
+-    return "\n".join(lines)
++def format_table(rows):
++    lines = []
++    for row in rows:
++        lines.append(", ".join(format_list(row)))
++    return "\n".join(lines)
+diff --git a/backend/app/analysis/risk/summary.py b/backend/app/analysis/risk/summary.py
+index 7373737..8484848 100644
+--- a/backend/app/analysis/risk/summary.py
++++ b/backend/app/analysis/risk/summary.py
+@@ -1,18 +1,18 @@
+-def build_summary(d):
+-    n = len(d.get("items", []))
+-    s = d.get("score", 0)
+-    return {"count": n, "score": s}
++def build_summary(data):
++    count = len(data.get("items", []))
++    score = data.get("score", 0)
++    return {"count": count, "score": score}
+
+
+-def merge_summaries(a, b):
+-    return {
+-        "count": a["count"] + b["count"],
+-        "score": max(a["score"], b["score"]),
+-    }
++def merge_summaries(first, second):
++    return {
++        "count": first["count"] + second["count"],
++        "score": max(first["score"], second["score"]),
++    }
+
+
+-def top_n(items, n):
+-    return sorted(items, reverse=True)[:n]
++def top_n(entries, n):
++    return sorted(entries, reverse=True)[:n]

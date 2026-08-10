@@ -1,0 +1,22 @@
+diff --git a/backend/app/api/webhooks.py b/backend/app/api/webhooks.py
+new file mode 100644
+index 0000000..9595959
+--- /dev/null
++++ b/backend/app/api/webhooks.py
+@@ -0,0 +1,16 @@
++from fastapi import APIRouter, HTTPException
++
++router = APIRouter(prefix="/api/v1/webhooks")
++
++
++@router.post("/github")
++def receive_github_webhook(payload: dict) -> dict:
++    try:
++        event_type = payload["event_type"]
++    except KeyError as exc:
++        raise HTTPException(status_code=400, detail="missing event_type") from exc
++
++    try:
++        return {"received": event_type}
++    except Exception as exc:
++        raise HTTPException(status_code=500, detail="webhook processing failed") from exc
