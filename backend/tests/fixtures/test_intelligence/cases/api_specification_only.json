@@ -1,0 +1,3 @@
+{
+  "api_specification": "openapi: 3.0.0\npaths:\n  /accounts/{id}:\n    get:\n      summary: Fetch an account record\ncomponents:\n  schemas:\n    Account:\n      type: object\n"
+}

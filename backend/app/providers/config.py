@@ -16,7 +16,7 @@ class ProviderSettings(BaseSettings):
 
     # Per-engine overrides. None falls back to default_provider.
     risk_provider: str | None = None
-    generation_provider: str | None = None
+    test_intelligence_provider: str | None = None
     triage_provider: str | None = None
 
     # Anthropic Claude provider. SecretStr keeps the key out of logs/reprs;

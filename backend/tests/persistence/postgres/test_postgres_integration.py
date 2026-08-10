@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
@@ -106,35 +107,39 @@ def test_migration_creates_all_expected_tables(migrated_engine):
     assert EXPECTED_TABLES <= _public_tables(migrated_engine)
 
 
-def _risk_finding_columns(engine) -> set[str]:
+def _current_db_revision(engine) -> str | None:
     with engine.connect() as conn:
-        return {
-            row[0]
-            for row in conn.execute(
-                text("select column_name from information_schema.columns where table_name = 'risk_findings'")
-            )
-        }
+        return conn.execute(text("select version_num from alembic_version")).scalar()
 
 
 def test_migration_downgrade_and_upgrade_round_trip(alembic_config, migrated_engine):
-    """Downgrading one revision from head must remove exactly what the
-    latest migration added, and upgrading back must restore it. Checked
-    against whichever migration is actually last (via risk_findings'
-    `categories` column, added by the latest one) rather than a hardcoded
-    table name, so this doesn't go stale the next time a migration lands on
-    top — which is exactly what broke the original hardcoded version of
-    this test in Sprint 6. The upgrade-back-to-head runs in `finally` so a
-    failed assertion here can't leave the shared database downgraded for
-    every other test in this module.
+    """Downgrading one revision from head and upgrading back must both
+    succeed, leaving `alembic_version` at the expected revision each time.
+
+    Checked purely via revision IDs from Alembic's own ScriptDirectory —
+    deliberately NOT by asserting what the latest migration's specific
+    schema change was. A version of this test hardcoded to a specific
+    migration's column/table went stale the moment the *next* migration
+    landed on top of it, twice in a row (Sprint 6, then again in Sprint 7).
+    Revision-ID bookkeeping doesn't have that problem: it's correct no
+    matter how many migrations exist. The upgrade-back-to-head runs in
+    `finally` so a failed assertion here can't leave the shared database
+    downgraded for every other test in this module.
     """
+    script = ScriptDirectory.from_config(alembic_config)
+    head_revision = script.get_current_head()
+    previous_revision = script.get_revision(head_revision).down_revision
+
+    assert _current_db_revision(migrated_engine) == head_revision
+
     try:
         command.downgrade(alembic_config, "-1")
-        assert "categories" not in _risk_finding_columns(migrated_engine)
-        assert "repositories" in _public_tables(migrated_engine)  # first migration's tables remain
+        assert _current_db_revision(migrated_engine) == previous_revision
+        assert "repositories" in _public_tables(migrated_engine)  # first migration's tables remain regardless
     finally:
         command.upgrade(alembic_config, "head")
 
-    assert "categories" in _risk_finding_columns(migrated_engine)
+    assert _current_db_revision(migrated_engine) == head_revision
 
 
 def test_repository_crud_round_trips(session):

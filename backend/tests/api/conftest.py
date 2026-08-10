@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
 from app.analysis.risk.engine import RiskEngine
+from app.analysis.test_intelligence.engine import TestIntelligenceEngine
 from app.main import app
 from app.orchestration.bootstrap import get_orchestrator
 from app.orchestration.orchestrator import AnalysisOrchestrator
@@ -30,6 +31,7 @@ def client(tmp_path):
 
     registry = EngineRegistry()
     registry.register(RiskEngine(provider_registry=ProviderRegistry(), session_factory=session_factory))
+    registry.register(TestIntelligenceEngine(provider_registry=ProviderRegistry(), session_factory=session_factory))
     orchestrator = AnalysisOrchestrator(
         registry=registry,
         task_queue=InProcessTaskQueue(),

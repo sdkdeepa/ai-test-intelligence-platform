@@ -77,7 +77,7 @@ def test_risk_finding_list_by_run(session):
 
 def test_test_suggestion_list_by_status(session):
     repo = RepositoryRepository(session).add(RepositoryModel(name="x", url="https://x", default_branch="main"))
-    run = AnalysisRunRepository(session).add(AnalysisRun(repo_id=repo.id, trigger="pr", type="generation", status="pending"))
+    run = AnalysisRunRepository(session).add(AnalysisRun(repo_id=repo.id, trigger="pr", type="test_intelligence", status="pending"))
     suggestions = TestSuggestionRepository(session)
     pending = suggestions.add(
         TestSuggestion(

@@ -1,0 +1,4 @@
+{
+  "requirement_text": "As a shopper, I want to complete checkout in a single workflow so that I can pay without leaving the cart page.",
+  "source_code": "def checkout(cart):\n    total = sum(item.price for item in cart.items)\n    return charge(total)\n"
+}

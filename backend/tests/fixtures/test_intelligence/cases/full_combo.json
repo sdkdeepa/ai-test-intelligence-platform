@@ -1,0 +1,8 @@
+{
+  "source_code": "@router.post(\"/transfer\", response_model=TransferOut)\ndef transfer(amount, account):\n    if amount <= 0:\n        raise ValueError(\"amount must be positive\")\n    if not authorize(account, amount):\n        raise PermissionError(\"not authorized\")\n    return account.balance[-1]\n",
+  "requirement_text": "As an account holder, I want to transfer funds in a single workflow and have invalid transfers rejected.",
+  "api_specification": "openapi: 3.0.0\npaths:\n  /transfer:\n    post:\n      summary: Transfer funds between accounts\n",
+  "diff": "diff --git a/backend/app/accounts/transfer.py b/backend/app/accounts/transfer.py\nindex 111..222 100644\n--- a/backend/app/accounts/transfer.py\n+++ b/backend/app/accounts/transfer.py\n@@ -1,2 +1,2 @@\n-def transfer(amount):\n+def transfer(amount, account):\n     pass\ndiff --git a/backend/app/accounts/ledger.py b/backend/app/accounts/ledger.py\nindex 333..444 100644\n--- a/backend/app/accounts/ledger.py\n+++ b/backend/app/accounts/ledger.py\n@@ -1,2 +1,2 @@\n-def record(amount):\n+def record(amount, account):\n     pass\n",
+  "existing_test_context": "Existing tests cover only the happy-path transfer; no integration coverage against the ledger service exists yet.",
+  "file_path": "backend/app/api/accounts.py"
+}
