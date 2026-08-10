@@ -20,6 +20,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.observability.logging import get_logger
+from app.observability.metrics import record_analysis_run_terminal_state
 from app.orchestration.engine import AnalysisContext, AnalysisEngine, AnalysisResult
 from app.orchestration.queue import JobState, TaskQueue
 from app.orchestration.registry import EngineRegistry
@@ -137,7 +138,10 @@ class AnalysisOrchestrator:
                 run.started_at = job_status.started_at
             if state in _TERMINAL_STATES:
                 run.finished_at = job_status.finished_at
+            engine_type = run.type
             session.commit()
+            if state in _TERMINAL_STATES:
+                record_analysis_run_terminal_state(engine_type=engine_type, status=state)
             logger.info(
                 "analysis_run_state_changed",
                 analysis_run_id=str(job_status.analysis_run_id),

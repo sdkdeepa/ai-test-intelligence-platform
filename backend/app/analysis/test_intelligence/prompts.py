@@ -19,6 +19,8 @@ from app.analysis.test_intelligence.heuristics import TEST_TYPES, TestTypeApplic
 from app.analysis.test_intelligence.inputs import TestIntelligenceInputs
 from app.providers.base import PromptSpec
 
+PROMPT_VERSION = "test_intelligence-v1"
+
 _SYSTEM_PROMPT = (
     "You are a senior test engineer proposing concrete tests for a code change. "
     "You are given the available inputs (code/diff, requirements, API spec, existing "
@@ -56,7 +58,11 @@ def build_test_intelligence_prompt(
     if inputs.existing_test_context:
         sections.append(f"Existing test context:\n{inputs.existing_test_context}")
 
-    return PromptSpec(system=_SYSTEM_PROMPT, user="\n\n".join(sections), metadata={"engine": "test_intelligence"})
+    return PromptSpec(
+        system=_SYSTEM_PROMPT,
+        user="\n\n".join(sections),
+        metadata={"engine": "test_intelligence", "prompt_version": PROMPT_VERSION},
+    )
 
 
 @dataclass(frozen=True)

@@ -17,6 +17,8 @@ from app.analysis.failure_intelligence.heuristics import CLASSIFICATIONS, Classi
 from app.analysis.failure_intelligence.inputs import FailureIntelligenceInputs
 from app.providers.base import PromptSpec
 
+PROMPT_VERSION = "failure_intelligence-v1"
+
 _SYSTEM_PROMPT = (
     "You are a senior engineer investigating a test failure. You are given the raw "
     "failure output and a deterministic classification already computed from factual "
@@ -60,7 +62,9 @@ def build_failure_intelligence_prompt(
         sections.append(f"Environment info:\n{inputs.environment_info}")
 
     return PromptSpec(
-        system=_SYSTEM_PROMPT, user="\n\n".join(sections), metadata={"engine": "failure_intelligence"}
+        system=_SYSTEM_PROMPT,
+        user="\n\n".join(sections),
+        metadata={"engine": "failure_intelligence", "prompt_version": PROMPT_VERSION},
     )
 
 
