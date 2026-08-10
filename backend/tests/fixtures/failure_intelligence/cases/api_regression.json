@@ -1,0 +1,6 @@
+{
+  "ci_log": "GET /api/v1/repositories/{id}/risk-findings\nResponse: 500 Internal Server Error\n",
+  "application_log": "ERROR app.api.risk: Unhandled exception in list_risk_findings: KeyError: 'confidence_score'\n",
+  "stack_trace": "Traceback (most recent call last):\n  File \"app/api/risk.py\", line 88, in list_risk_findings\n    return [f['confidence_score'] for f in findings]\nKeyError: 'confidence_score'\n",
+  "test_name": "tests/api/test_risk_api.py::test_full_vertical_slice_from_trigger_to_findings"
+}

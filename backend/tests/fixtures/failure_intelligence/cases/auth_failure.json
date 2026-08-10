@@ -1,0 +1,5 @@
+{
+  "pytest_output": "FAILED tests/api/test_users_api.py::test_admin_can_delete_user - AssertionError: assert 403 == 200\n",
+  "ci_log": "Request: DELETE /api/v1/users/42\nResponse: 403 Forbidden\nExpected: 200 OK\n",
+  "test_name": "tests/api/test_users_api.py::test_admin_can_delete_user"
+}

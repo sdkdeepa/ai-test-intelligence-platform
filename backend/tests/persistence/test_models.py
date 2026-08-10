@@ -74,7 +74,7 @@ def _make_test_result(session) -> TestResult:
 def test_failure_finding_classifies_a_single_test_result(session):
     result = _make_test_result(session)
     repo_id = result.test_case.repo_id
-    run = AnalysisRun(repo_id=repo_id, trigger="ci", type="triage", status="pending")
+    run = AnalysisRun(repo_id=repo_id, trigger="ci", type="failure_intelligence", status="pending")
     session.add(run)
     session.flush()
 

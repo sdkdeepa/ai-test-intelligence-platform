@@ -66,6 +66,7 @@ class TestCase(Base):
     repository: Mapped["Repository"] = relationship(back_populates="test_cases")
     test_results: Mapped[list["TestResult"]] = relationship(back_populates="test_case")
     flaky_findings: Mapped[list["FlakyTestFinding"]] = relationship(back_populates="test_case")
+    failure_findings: Mapped[list["FailureFinding"]] = relationship(back_populates="test_case")
 
 
 class TestRun(Base):
@@ -213,26 +214,44 @@ class FlakyTestFinding(Base):
 class FailureFinding(Base):
     """Per-occurrence classification of a single CI test failure.
 
-    Distinct from `FlakyTestFinding`: the Triage Engine classifies every
-    individual failure as regression / flaky / environment (architecture.md
+    Distinct from `FlakyTestFinding`: the Failure Intelligence Engine classifies every
+    individual failure as regression / flaky / environment / unknown (architecture.md
     §1, capability 3). `FailureFinding` is that one-classification-per-
     failure record; `FlakyTestFinding` is the separate, coarser aggregate a
     `TestCase` accumulates once a pattern of flaky `FailureFinding`s emerges
     across many runs (system-design.md §3 — TEST_CASES ||--o{
     FLAKY_TEST_FINDINGS). Neither replaces the other.
+
+    `test_result_id` is nullable (extended for Sprint 8): the engine can
+    analyze raw failure text (a pasted CI log, a stack trace) that has no
+    corresponding persisted TestResult row, not only failures ingestion has
+    already normalized. `test_case_id`, when known, is what unlocks
+    historical clustering independent of any one run.
+
+    Field-level split enforced by the engine, not just by convention:
+    `classification`/`evidence`/`missing_evidence` are deterministic facts;
+    `root_cause_hypotheses`/`suggested_bug_report` are AI-generated and
+    never influence the former (see analysis/failure_intelligence/engine.py).
     """
 
     __tablename__ = "failure_findings"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
-    test_result_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("test_results.id"), nullable=False, index=True)
+    test_result_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("test_results.id"), index=True)
+    test_case_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("test_cases.id"), index=True)
     analysis_run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("analysis_runs.id"), nullable=False, index=True)
-    classification: Mapped[str] = mapped_column(nullable=False)  # "regression" | "flaky" | "environment"
+    classification: Mapped[str] = mapped_column(nullable=False)  # "regression" | "flaky" | "environment" | "unknown"
     confidence_score: Mapped[float | None]
     rationale: Mapped[str | None] = mapped_column(Text)
+    root_cause_hypotheses: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    evidence: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    missing_evidence: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    debugging_recommendations: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    suggested_bug_report: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(default=_utcnow, nullable=False)
 
-    test_result: Mapped["TestResult"] = relationship(back_populates="failure_findings")
+    test_result: Mapped["TestResult | None"] = relationship(back_populates="failure_findings")
+    test_case: Mapped["TestCase | None"] = relationship(back_populates="failure_findings")
     analysis_run: Mapped["AnalysisRun"] = relationship(back_populates="failure_findings")
 
 

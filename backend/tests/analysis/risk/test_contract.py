@@ -1,7 +1,7 @@
 """Contract tests: does RiskEngine actually satisfy the AnalysisEngine
 interface Sprint 5 defined, and does it work through EngineRegistry /
-AnalysisOrchestrator the same way any future engine (Test Intelligence,
-Triage) would? Mirrors tests/providers/test_contract.py's shape.
+AnalysisOrchestrator the same way any other engine (Test Intelligence,
+Failure Intelligence) would? Mirrors tests/providers/test_contract.py's shape.
 """
 
 import uuid

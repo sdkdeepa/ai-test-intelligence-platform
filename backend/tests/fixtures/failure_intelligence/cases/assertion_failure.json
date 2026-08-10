@@ -1,0 +1,5 @@
+{
+  "pytest_output": "FAILED tests/test_math.py::test_add - AssertionError: assert 5 == 4\n  where 5 = add(2, 3)\n",
+  "stack_trace": "Traceback (most recent call last):\n  File \"tests/test_math.py\", line 12, in test_add\n    assert add(2, 3) == 4\nAssertionError: assert 5 == 4\n",
+  "test_name": "tests/test_math.py::test_add"
+}

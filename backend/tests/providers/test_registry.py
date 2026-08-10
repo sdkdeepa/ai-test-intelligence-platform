@@ -28,16 +28,16 @@ def test_resolves_default_provider_for_any_engine():
 
     assert registry.get("risk").name() == "mock"
     assert registry.get("test_intelligence").name() == "mock"
-    assert registry.get("triage").name() == "mock"
+    assert registry.get("failure_intelligence").name() == "mock"
 
 
 def test_per_engine_override_takes_precedence_over_default():
     registry = ProviderRegistry(
-        ProviderSettings(default_provider="mock", triage_provider="stub")
+        ProviderSettings(default_provider="mock", failure_intelligence_provider="stub")
     )
     registry.register(_StubProvider())
 
-    assert registry.get("triage").name() == "stub"
+    assert registry.get("failure_intelligence").name() == "stub"
     assert registry.get("risk").name() == "mock"
 
 

@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.failure_intelligence import router as failure_intelligence_router
 from app.api.health import router as health_router
 from app.api.repositories import router as repositories_router
 from app.api.risk import router as risk_router
@@ -33,6 +34,7 @@ def create_app() -> FastAPI:
     app.include_router(risk_router)
     app.include_router(test_intelligence_repo_router)
     app.include_router(test_suggestion_router)
+    app.include_router(failure_intelligence_router)
     return app
 
 

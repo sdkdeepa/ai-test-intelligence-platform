@@ -1,0 +1,5 @@
+{
+  "playwright_output": "Test timeout of 30000ms exceeded.\nError: locator.click: Target closed\n  at tests/e2e/checkout.spec.ts:22\n",
+  "stack_trace": "TimeoutError: locator.click: Target closed\n",
+  "test_name": "tests/e2e/checkout.spec.ts::completes checkout"
+}
