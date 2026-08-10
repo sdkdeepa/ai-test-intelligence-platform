@@ -17,14 +17,6 @@ GitHub pull requests and CI webhooks.
 This is a production-quality reference platform, built incrementally in scoped
 engineering sprints — not a tutorial or hackathon project.
 
-## Status
-
-**Sprint 1 complete: repository scaffold and development foundation.** A running
-FastAPI backend (health endpoint, config, structured logging) and a React/Vite/TS
-frontend shell exist and are containerized. No business logic, providers, or analysis
-engines are implemented yet — see [Development Roadmap](docs/development-roadmap.md)
-for what's next.
-
 ## Documentation
 
 - [Architecture](docs/architecture.md) — high-level architecture, component diagram,
@@ -32,8 +24,6 @@ for what's next.
   and CI/CD strategy.
 - [System Design](docs/system-design.md) — data flow diagrams, database schema, and API
   boundaries.
-- [Development Roadmap](docs/development-roadmap.md) — sprint sequencing and explicitly
-  deferred decisions.
 
 ## Stack
 
@@ -63,9 +53,3 @@ docker compose up --build
 
 Backend serves on `:8000`, frontend on `:4173` when run via Docker (`:5173` under
 `npm run dev`).
-
-## Working Agreement
-
-This repository is built in discrete, explicitly-scoped sprints. Each sprint report
-includes every file created/modified, the updated repository tree, and test/validation
-results, and stops for review before the next sprint begins.
