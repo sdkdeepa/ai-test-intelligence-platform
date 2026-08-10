@@ -1,0 +1,28 @@
+diff --git a/backend/app/auth/permissions.py b/backend/app/auth/permissions.py
+index 7070707..8080808 100644
+--- a/backend/app/auth/permissions.py
++++ b/backend/app/auth/permissions.py
+@@ -4,7 +4,9 @@ def require_role(user, role):
+-    if role in user.roles:
+-        return True
+-    return False
++    if is_admin(user):
++        return True
++    if role in user.roles and authorize(user, role):
++        return True
++    return False
+diff --git a/backend/app/persistence/models.py b/backend/app/persistence/models.py
+index 9090909..1212121 100644
+--- a/backend/app/persistence/models.py
++++ b/backend/app/persistence/models.py
+@@ -40,6 +40,7 @@ class Repository(Base):
+     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
++    owner_role: Mapped[str | None] = mapped_column(ForeignKey("roles.id"))
+     name: Mapped[str] = mapped_column(nullable=False)
+diff --git a/.env b/.env
+index 3232323..4343434 100644
+--- a/.env
++++ b/.env
+@@ -1,3 +1,4 @@
+ DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/ai_test_intelligence
++PROVIDER_ANTHROPIC_API_KEY=sk-ant-example-not-real

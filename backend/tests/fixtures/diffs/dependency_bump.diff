@@ -1,0 +1,12 @@
+diff --git a/backend/pyproject.toml b/backend/pyproject.toml
+index 8888888..9999999 100644
+--- a/backend/pyproject.toml
++++ b/backend/pyproject.toml
+@@ -10,7 +10,7 @@ dependencies = [
+     "fastapi>=0.115,<1.0",
+     "uvicorn[standard]>=0.30,<1.0",
+     "pydantic>=2.8,<3.0",
+-    "anthropic>=0.40,<1.0",
++    "anthropic>=0.42,<1.0",
+     "structlog>=24.1,<25.0",
+ ]

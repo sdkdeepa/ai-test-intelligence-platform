@@ -1,0 +1,28 @@
+diff --git a/backend/migrations/versions/0002_add_billing_columns.py b/backend/migrations/versions/0002_add_billing_columns.py
+new file mode 100644
+index 0000000..5555555
+--- /dev/null
++++ b/backend/migrations/versions/0002_add_billing_columns.py
+@@ -0,0 +1,12 @@
++"""add billing columns"""
++from alembic import op
++import sqlalchemy as sa
++
++
++def upgrade() -> None:
++    op.add_column('repositories', sa.Column('billing_plan', sa.String(), nullable=True))
++    op.execute("ALTER TABLE repositories ALTER COLUMN billing_plan SET DEFAULT 'free'")
++
++
++def downgrade() -> None:
++    op.drop_column('repositories', 'billing_plan')
+diff --git a/backend/app/persistence/models.py b/backend/app/persistence/models.py
+index 6666666..7777777 100644
+--- a/backend/app/persistence/models.py
++++ b/backend/app/persistence/models.py
+@@ -30,6 +30,7 @@ class Repository(Base):
+     name: Mapped[str] = mapped_column(nullable=False)
+     url: Mapped[str] = mapped_column(nullable=False)
+     default_branch: Mapped[str] = mapped_column(nullable=False)
++    billing_plan: Mapped[str | None] = mapped_column(default="free")
+     created_at: Mapped[datetime] = mapped_column(default=_utcnow, nullable=False)

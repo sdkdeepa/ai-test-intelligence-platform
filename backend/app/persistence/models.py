@@ -134,6 +134,17 @@ class AnalysisRun(Base):
 
 
 class RiskFinding(Base):
+    """One Risk Engine assessment per AnalysisRun (system-design.md §3, extended
+    for the Sprint 6 vertical slice).
+
+    `file_path` holds the single most significant affected file (the one
+    behind the highest-weight deterministic signal, or the first changed
+    file if none matched) — kept NOT NULL rather than reworked into a
+    nullable "aggregate finding" field, since every finding has at least one
+    changed file. `affected_components` carries the full picture; `file_path`
+    is a quick single-column pointer into it.
+    """
+
     __tablename__ = "risk_findings"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
@@ -142,6 +153,13 @@ class RiskFinding(Base):
     file_path: Mapped[str] = mapped_column(nullable=False)
     risk_score: Mapped[float] = mapped_column(nullable=False)
     rationale: Mapped[str | None] = mapped_column(Text)
+    categories: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    evidence: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    confidence_score: Mapped[float] = mapped_column(nullable=False, default=0.5)
+    affected_components: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    recommended_regression_scope: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    release_recommendation: Mapped[str] = mapped_column(nullable=False, default="proceed")
+    created_at: Mapped[datetime] = mapped_column(default=_utcnow, nullable=False)
 
     analysis_run: Mapped["AnalysisRun"] = relationship(back_populates="risk_findings")
 

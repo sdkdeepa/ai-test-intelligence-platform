@@ -1,0 +1,14 @@
+diff --git a/backend/app/api/risk.py b/backend/app/api/risk.py
+index 1010101..2020202 100644
+--- a/backend/app/api/risk.py
++++ b/backend/app/api/risk.py
+@@ -20,7 +20,12 @@ def trigger_risk_analysis(repo_id, payload, session):
+-    analysis_run_id = orchestrator.submit(repo_id=repo_id, engine_type="risk")
+-    return RiskAnalysisTriggered(analysis_run_id=analysis_run_id, status="pending")
++    try:
++        analysis_run_id = orchestrator.submit(repo_id=repo_id, engine_type="risk")
++    except EngineNotRegisteredError as exc:
++        raise HTTPException(status_code=500, detail=str(exc)) from exc
++    except ValueError as exc:
++        raise HTTPException(status_code=400, detail=str(exc)) from exc
++    return RiskAnalysisTriggered(analysis_run_id=analysis_run_id, status="pending")

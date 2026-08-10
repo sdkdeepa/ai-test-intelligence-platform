@@ -1,0 +1,7 @@
+diff --git a/README.md b/README.md
+index 5050505..6060606 100644
+--- a/README.md
++++ b/README.md
+@@ -12,7 +12,7 @@ AI Test Intelligence Platform
+-This is teh backend service for risk analysis.
++This is the backend service for risk analysis.
