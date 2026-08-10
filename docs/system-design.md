@@ -34,7 +34,7 @@ sequenceDiagram
     GH-->>Dev: Check result visible on PR
 ```
 
-## 2. Data Flow: CI Failure Triage
+## 2. Data Flow: CI Failure Analysis
 
 ```mermaid
 sequenceDiagram
@@ -42,19 +42,19 @@ sequenceDiagram
     participant API as API Layer
     participant Ing as Ingestion Service
     participant Orch as Orchestrator
-    participant Triage as Triage Engine
+    participant FailureIntel as Failure Intelligence Engine
     participant Prov as Provider Abstraction
     participant DB as PostgreSQL
 
     CI->>API: POST /webhooks/ci (test results)
     API->>Ing: normalize test run + results
     Ing->>DB: persist TestRun, TestResults
-    Ing->>Orch: enqueue AnalysisRun(type=triage)
-    Orch->>Triage: run(context: failed TestResults)
-    Triage->>DB: read historical TestResults for same TestCase
-    Triage->>Prov: generate(triage prompt)
-    Prov-->>Triage: LLMResponse (classification + rationale)
-    Triage->>DB: write FlakyTestFindings / classification
+    Ing->>Orch: enqueue AnalysisRun(type=failure_intelligence)
+    Orch->>FailureIntel: run(context: failed TestResults)
+    FailureIntel->>DB: read historical TestResults for same TestCase
+    FailureIntel->>Prov: generate(failure intelligence prompt)
+    Prov-->>FailureIntel: LLMResponse (root cause hypotheses + rationale)
+    FailureIntel->>DB: write FlakyTestFindings / FailureFindings
     Orch->>DB: mark AnalysisRun complete
 ```
 
@@ -210,10 +210,11 @@ All endpoints are versioned under `/api/v1`.
 
 ## 5. Module Contracts
 
-- **`AnalysisEngine` interface** (implemented by Risk, Test Intelligence, Triage engines):
-  `run(context: AnalysisContext) -> AnalysisResult`. `AnalysisContext` carries the repo,
-  commit/PR reference, and any engine-specific inputs (e.g. failed test results for
-  triage). The orchestrator depends only on this interface, never on a concrete engine.
+- **`AnalysisEngine` interface** (implemented by Risk, Test Intelligence, Failure
+  Intelligence engines): `run(context: AnalysisContext) -> AnalysisResult`.
+  `AnalysisContext` carries the repo, commit/PR reference, and any engine-specific
+  inputs (e.g. failed test results for failure intelligence). The orchestrator depends
+  only on this interface, never on a concrete engine.
 - **`LLMProvider` interface**: see [architecture.md §7](architecture.md#7-provider-abstraction-strategy).
 - **`TaskQueue` interface**: `enqueue(job) -> job_id`, `status(job_id) -> JobStatus`.
   The in-process implementation runs jobs on an async worker pool within the API
