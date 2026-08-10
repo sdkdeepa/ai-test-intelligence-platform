@@ -13,22 +13,22 @@ sequenceDiagram
     participant Ing as Ingestion Service
     participant Orch as Orchestrator
     participant Risk as Risk Engine
-    participant Gen as Test Intelligence Engine
+    participant TestIntel as Test Intelligence Engine
     participant Prov as Provider Abstraction
     participant DB as PostgreSQL
 
     Dev->>GH: Open / update PR
     GH->>API: POST /webhooks/github (PR event)
     API->>Ing: normalize event
-    Ing->>Orch: enqueue AnalysisRun(type=risk, generation)
+    Ing->>Orch: enqueue AnalysisRun(type=risk, test_intelligence)
     Orch->>Risk: run(context)
-    Orch->>Gen: run(context)
+    Orch->>TestIntel: run(context)
     Risk->>Prov: generate(risk prompt)
     Prov-->>Risk: LLMResponse
     Risk->>DB: write RiskFindings
-    Gen->>Prov: generate(test suggestion prompt)
-    Prov-->>Gen: LLMResponse
-    Gen->>DB: write TestSuggestions
+    TestIntel->>Prov: generate(test suggestion prompt)
+    Prov-->>TestIntel: LLMResponse
+    TestIntel->>DB: write TestSuggestions
     Orch->>DB: mark AnalysisRun complete
     API->>GH: POST status check + PR comment
     GH-->>Dev: Check result visible on PR
@@ -210,7 +210,7 @@ All endpoints are versioned under `/api/v1`.
 
 ## 5. Module Contracts
 
-- **`AnalysisEngine` interface** (implemented by Risk, Generation, Triage engines):
+- **`AnalysisEngine` interface** (implemented by Risk, Test Intelligence, Triage engines):
   `run(context: AnalysisContext) -> AnalysisResult`. `AnalysisContext` carries the repo,
   commit/PR reference, and any engine-specific inputs (e.g. failed test results for
   triage). The orchestrator depends only on this interface, never on a concrete engine.
