@@ -305,6 +305,39 @@ Two scoping decisions worth recording:
   an engine produced a given finding — essential for an AI system where "why did it say
   that" is a routine support question, not an edge case.
 
+**Implementation status (Sprint 9):**
+
+- **Structured JSON logging**, **correlation IDs**, **`analysis_run_id`**, and **trace
+  IDs** are implemented (`backend/app/observability/logging.py`, threaded through
+  `AnalysisContext`/`JobStatus` since Sprint 5) and now also appear on every
+  `llm_invocation_recorded` log line emitted by `observability/llm_tracking.py`.
+- **`/metrics`** (`backend/app/api/metrics.py`) is a Prometheus-compatible endpoint
+  (`prometheus_client`, no metrics backend lock-in) exposing `llm_invocations_total`,
+  `llm_tokens_total` (labeled `provider`/`model`/`engine_type`/`direction`),
+  `llm_latency_seconds`, `llm_estimated_cost_usd_total`, and `analysis_runs_total`
+  (labeled `engine_type`/`status`). Estimated cost comes from a small static per-model
+  price table (`observability/pricing.py`) — approximate, not a billing reconciliation;
+  an unrecognized model reports no cost rather than a fabricated one.
+- **LLM audit trail**: `LLMInvocation` rows (persisted since this sprint —
+  `observability/llm_tracking.py`'s `observed_generate()` wraps every
+  `LLMProvider.generate()` call site in the three engines) carry token usage, latency,
+  and estimated cost keyed to `analysis_run_id`, as designed above. Prompt/response
+  *content* is deliberately not persisted here (a decision already made in Sprint 4,
+  not a gap introduced this sprint) — token counts and metadata only.
+- **LangSmith** (`observability/langsmith_client.py`, `llm_tracking.py`,
+  `eval_datasets.py`, `experiments.py`) is the trace-capture/experiment-tracking layer:
+  every LLM call becomes a LangSmith run tagged with prompt version
+  (`analysis/*/prompts.py`'s `PROMPT_VERSION` constants), provider/model, and
+  correlation/trace IDs; three small representative-scenario datasets (risk analysis,
+  test intelligence, failure intelligence) sync on startup; `run_evaluation_experiment()`
+  replays a dataset through a real engine for lightweight experiment tracking.
+  **Strictly optional** — `LANGSMITH_ENABLED=false` is the default, every LangSmith call
+  is wrapped so a failure (missing key, unreachable, disabled) never fails the request
+  it's attached to, and normal CI runs with it disabled and no credentials.
+- **OpenTelemetry tracing** across ingestion → orchestration → provider call →
+  persistence, and **automated sensitive-content redaction rules**, remain deferred —
+  not implemented this sprint.
+
 ## 9. Testing Strategy
 
 - **Backend unit tests** (pytest): each module tested in isolation; analysis engines

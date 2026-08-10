@@ -29,8 +29,11 @@ engineering sprints — not a tutorial or hackathon project.
 
 - **Backend:** Python 3.12, FastAPI, Pydantic Settings, structlog
 - **Frontend:** React, TypeScript, Vite
-- **LLM providers:** Anthropic Claude (primary), OpenAI (secondary), Mock (test/CI) — not yet implemented (Sprint 3)
-- **Persistence:** PostgreSQL, SQLAlchemy 2.0 — not yet implemented (Sprint 2)
+- **LLM providers:** Anthropic Claude (primary), Mock (test/CI) — OpenAI not yet implemented
+- **Persistence:** PostgreSQL, SQLAlchemy 2.0, Alembic
+- **Observability:** Prometheus-compatible `/metrics`, structured JSON logging, optional
+  LangSmith trace/experiment/dataset integration (disabled by default — see
+  `docs/architecture.md` §8)
 - **CI/CD:** GitHub Actions — not yet implemented
 
 ## Getting Started

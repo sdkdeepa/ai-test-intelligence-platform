@@ -15,6 +15,12 @@ from app.analysis.risk.heuristics import RISK_CATEGORIES, DeterministicAssessmen
 from app.ingestion.diff import GitDiff
 from app.providers.base import PromptSpec
 
+# Bumped whenever _SYSTEM_PROMPT's instructions or expected shape change —
+# threaded into LangSmith run metadata (observability/llm_tracking.py) so
+# prompt regressions are traceable to a specific version, per
+# architecture.md §7: "a prompt change is a diff like any other code change."
+PROMPT_VERSION = "risk-v1"
+
 _SYSTEM_PROMPT = (
     "You are a senior software engineer performing a pre-release risk review of a "
     "code change. You are given a diff summary and a deterministic risk assessment "
@@ -43,7 +49,7 @@ def build_risk_prompt(diff: GitDiff, deterministic: DeterministicAssessment) -> 
         f"Deterministic evidence:\n" + ("\n".join(f"- {e}" for e in deterministic.evidence) or "(none)")
     )
 
-    return PromptSpec(system=_SYSTEM_PROMPT, user=user, metadata={"engine": "risk"})
+    return PromptSpec(system=_SYSTEM_PROMPT, user=user, metadata={"engine": "risk", "prompt_version": PROMPT_VERSION})
 
 
 @dataclass(frozen=True)

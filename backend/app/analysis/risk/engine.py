@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.analysis.risk.heuristics import compute_deterministic_assessment
 from app.analysis.risk.prompts import build_risk_prompt, parse_llm_output
 from app.ingestion.diff import parse_unified_diff
+from app.observability.llm_tracking import observed_generate
 from app.orchestration.engine import AnalysisContext, AnalysisEngine, AnalysisResult
 from app.persistence.models import RiskFinding
 from app.persistence.repositories import RiskFindingRepository
@@ -46,7 +47,15 @@ class RiskEngine(AnalysisEngine):
         deterministic = compute_deterministic_assessment(diff)
 
         provider = self._provider_registry.get("risk")
-        llm_response = provider.generate(build_risk_prompt(diff, deterministic))
+        llm_response = observed_generate(
+            provider,
+            build_risk_prompt(diff, deterministic),
+            analysis_run_id=context.analysis_run_id,
+            engine_type=self.engine_type(),
+            session_factory=self._session_factory,
+            correlation_id=context.correlation_id,
+            trace_id=context.trace_id,
+        )
         llm_assessment = parse_llm_output(llm_response.output)
 
         final_categories = sorted(set(deterministic.categories) | set(llm_assessment.additional_categories))

@@ -23,6 +23,7 @@ from app.analysis.failure_intelligence.clustering import (
 from app.analysis.failure_intelligence.heuristics import classify, compute_missing_evidence, extract_evidence
 from app.analysis.failure_intelligence.inputs import FailureIntelligenceInputs
 from app.analysis.failure_intelligence.prompts import build_failure_intelligence_prompt, parse_llm_output
+from app.observability.llm_tracking import observed_generate
 from app.orchestration.engine import AnalysisContext, AnalysisEngine, AnalysisResult
 from app.persistence.models import FailureFinding
 from app.persistence.repositories import FailureFindingRepository
@@ -56,7 +57,16 @@ class FailureIntelligenceEngine(AnalysisEngine):
 
             provider = self._provider_registry.get("failure_intelligence")
             prompt = build_failure_intelligence_prompt(inputs, evidence, classification_result)
-            llm_analysis = parse_llm_output(provider.generate(prompt).output)
+            llm_response = observed_generate(
+                provider,
+                prompt,
+                analysis_run_id=context.analysis_run_id,
+                engine_type=self.engine_type(),
+                session_factory=self._session_factory,
+                correlation_id=context.correlation_id,
+                trace_id=context.trace_id,
+            )
+            llm_analysis = parse_llm_output(llm_response.output)
 
             final_confidence = round(
                 max(0.0, min(1.0, classification_result.confidence + llm_analysis.confidence_adjustment)), 4

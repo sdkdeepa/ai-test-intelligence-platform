@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.analysis.test_intelligence.heuristics import compute_applicability, compute_input_gaps
 from app.analysis.test_intelligence.inputs import TestIntelligenceInputs
 from app.analysis.test_intelligence.prompts import build_test_intelligence_prompt, parse_llm_output
+from app.observability.llm_tracking import observed_generate
 from app.orchestration.engine import AnalysisContext, AnalysisEngine, AnalysisResult
 from app.persistence.models import TestSuggestion
 from app.persistence.repositories import TestSuggestionRepository
@@ -61,7 +62,15 @@ class TestIntelligenceEngine(AnalysisEngine):
 
         applicable_types = {a.test_type for a in applicable}
         provider = self._provider_registry.get("test_intelligence")
-        llm_response = provider.generate(build_test_intelligence_prompt(inputs, applicability))
+        llm_response = observed_generate(
+            provider,
+            build_test_intelligence_prompt(inputs, applicability),
+            analysis_run_id=context.analysis_run_id,
+            engine_type=self.engine_type(),
+            session_factory=self._session_factory,
+            correlation_id=context.correlation_id,
+            trace_id=context.trace_id,
+        )
         llm_suggestions = parse_llm_output(llm_response.output, applicable_types)
 
         target_function = _infer_target_function(inputs.code_content)
