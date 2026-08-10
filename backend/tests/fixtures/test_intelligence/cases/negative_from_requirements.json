@@ -1,0 +1,4 @@
+{
+  "requirement_text": "The system must not allow negative amounts; any invalid amount should be rejected with a 400 response.",
+  "source_code": "def validate_amount(amount):\n    return amount\n"
+}

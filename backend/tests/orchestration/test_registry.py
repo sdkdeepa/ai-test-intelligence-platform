@@ -59,6 +59,6 @@ def test_register_replaces_existing_engine_for_same_type():
 def test_registered_types_lists_all_registered_engines():
     registry = EngineRegistry()
     registry.register(_FakeEngine("risk"))
-    registry.register(_FakeEngine("generation"))
+    registry.register(_FakeEngine("test_intelligence"))
 
-    assert set(registry.registered_types()) == {"risk", "generation"}
+    assert set(registry.registered_types()) == {"risk", "test_intelligence"}

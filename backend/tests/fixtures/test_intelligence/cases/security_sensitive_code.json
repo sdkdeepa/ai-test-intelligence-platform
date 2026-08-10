@@ -1,0 +1,4 @@
+{
+  "source_code": "def login(username, password):\n    if not authenticate(username, password):\n        raise ValueError(\"invalid credentials\")\n    return issue_session(username)\n",
+  "file_path": "backend/app/auth/login.py"
+}

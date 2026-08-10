@@ -27,7 +27,7 @@ def test_resolves_default_provider_for_any_engine():
     registry = ProviderRegistry(ProviderSettings(default_provider="mock"))
 
     assert registry.get("risk").name() == "mock"
-    assert registry.get("generation").name() == "mock"
+    assert registry.get("test_intelligence").name() == "mock"
     assert registry.get("triage").name() == "mock"
 
 
@@ -52,7 +52,7 @@ def test_registering_a_provider_makes_it_resolvable():
     registry = ProviderRegistry(ProviderSettings(default_provider="stub"))
     registry.register(_StubProvider())
 
-    resolved = registry.get("generation")
+    resolved = registry.get("test_intelligence")
 
     assert resolved.name() == "stub"
 

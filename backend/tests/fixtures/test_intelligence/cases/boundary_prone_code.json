@@ -1,0 +1,4 @@
+{
+  "source_code": "def clamp_index(items, i):\n    if i <= 0:\n        return items[0]\n    if i >= len(items):\n        return items[-1]\n    return items[i]\n",
+  "file_path": "backend/app/util/lists.py"
+}

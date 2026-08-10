@@ -6,7 +6,7 @@ def test_defaults_to_mock_provider():
 
     assert settings.default_provider == "mock"
     assert settings.risk_provider is None
-    assert settings.generation_provider is None
+    assert settings.test_intelligence_provider is None
     assert settings.triage_provider is None
 
 

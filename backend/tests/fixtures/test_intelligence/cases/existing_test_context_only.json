@@ -1,0 +1,3 @@
+{
+  "existing_test_context": "Existing suite only exercises the mock provider; no integration test runs against a real database."
+}

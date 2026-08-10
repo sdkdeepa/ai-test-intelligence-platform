@@ -1,0 +1,4 @@
+{
+  "source_code": "def parse_amount(raw):\n    try:\n        return float(raw)\n    except ValueError:\n        raise ValueError(\"amount must be numeric\")\n",
+  "file_path": "backend/app/billing/amounts.py"
+}

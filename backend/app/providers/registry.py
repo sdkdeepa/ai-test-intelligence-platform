@@ -6,7 +6,7 @@ from app.providers.base import LLMProvider
 from app.providers.config import ProviderSettings, get_provider_settings
 from app.providers.mock import MockProvider
 
-EngineType = Literal["risk", "generation", "triage"]
+EngineType = Literal["risk", "test_intelligence", "triage"]
 
 
 class ProviderRegistry:
@@ -47,7 +47,7 @@ class ProviderRegistry:
     def _resolve_provider_name(self, engine_type: EngineType) -> str:
         overrides = {
             "risk": self._settings.risk_provider,
-            "generation": self._settings.generation_provider,
+            "test_intelligence": self._settings.test_intelligence_provider,
             "triage": self._settings.triage_provider,
         }
         return overrides.get(engine_type) or self._settings.default_provider

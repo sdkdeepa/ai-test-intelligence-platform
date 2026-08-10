@@ -40,7 +40,7 @@ flowchart TB
 
         subgraph Engines["Analysis Engines"]
             Risk["Coverage / Risk Analyzer"]
-            Gen["Test Generator"]
+            Gen["Test Intelligence Engine"]
             Triage["Failure Triage Analyzer"]
         end
 
@@ -82,7 +82,7 @@ flowchart TB
 
 - A PR event or CI test-run completion arrives via webhook and is normalized by the
   Ingestion Service.
-- The Orchestrator enqueues an analysis run (risk, generation, and/or triage — the
+- The Orchestrator enqueues an analysis run (risk, test_intelligence, and/or triage — the
   ingestion event determines which engines apply) and executes it asynchronously.
 - Engines never call an LLM provider directly; they go through the Provider Abstraction
   Layer, which handles provider selection, retries, and usage/cost accounting.
@@ -103,7 +103,7 @@ flowchart LR
     subgraph Core["Analysis Core"]
         Orchestrator["Orchestrator<br/>(TaskQueue interface)"]
         RiskEngine["Risk Engine"]
-        GenEngine["Test Intelligence Engine"]
+        TestIntelEngine["Test Intelligence Engine"]
         TriageEngine["Triage Engine"]
         Prompts["Prompt Templates<br/>(versioned)"]
     end
@@ -132,11 +132,11 @@ flowchart LR
     GitAdapter --> Normalizer
     CIAdapter --> Normalizer
     Normalizer --> Orchestrator
-    Orchestrator --> RiskEngine & GenEngine & TriageEngine
-    RiskEngine & GenEngine & TriageEngine --> Prompts
-    RiskEngine & GenEngine & TriageEngine --> Registry
+    Orchestrator --> RiskEngine & TestIntelEngine & TriageEngine
+    RiskEngine & TestIntelEngine & TriageEngine --> Prompts
+    RiskEngine & TestIntelEngine & TriageEngine --> Registry
     Registry --> AnthropicImpl & OpenAIImpl & MockImpl
-    RiskEngine & GenEngine & TriageEngine --> Repos
+    RiskEngine & TestIntelEngine & TriageEngine --> Repos
     Repos --> Models --> Migrations
     REST --> Repos
     Webhooks --> Normalizer
@@ -163,7 +163,7 @@ ai-test-intelligence-platform/
 │   ├── orchestration/       # TaskQueue interface + in-process implementation
 │   ├── analysis/
 │   │   ├── risk/            # Coverage/risk analyzer engine
-│   │   ├── generation/       # Test Test Intelligence Engine
+│   │   ├── test_intelligence/ # Test Intelligence Engine
 │   │   ├── triage/           # Failure triage engine
 │   │   └── prompts/          # Versioned prompt templates, shared across engines
 │   ├── providers/            # LLM provider abstraction + implementations
@@ -263,7 +263,7 @@ classDiagram
   (deterministic, used in all unit/integration tests and CI — no real API key ever
   required to run the test suite).
 - `ProviderRegistry` resolves a provider per analysis engine from configuration, so
-  e.g. triage can run on a cheaper/faster model while generation uses a stronger one,
+  e.g. triage can run on a cheaper/faster model while test_intelligence uses a stronger one,
   without code changes.
 - Prompt templates live in `analysis/prompts/`, are version-tagged, and are treated as
   reviewable artifacts (a prompt change is a diff like any other code change).
@@ -275,10 +275,10 @@ classDiagram
 Two scoping decisions worth recording:
 
 - The registry currently resolves *provider selection* per engine
-  (`risk_provider` / `generation_provider` / `triage_provider` config overrides), not
+  (`risk_provider` / `test_intelligence_provider` / `triage_provider` config overrides), not
   per-engine *model* selection. With only `MockProvider` registered, a model override
   has no observable effect — that configuration surface is deferred until a second real
-  provider (Sprint 3) makes the triage-cheap/generation-strong distinction meaningful,
+  provider (Sprint 3) makes the triage-cheap/test-intelligence-strong distinction meaningful,
   rather than building it against a provider that can't exercise it.
 - Retry/backoff/timeout wrapping is not yet implemented — `MockProvider` never makes a
   network call, so there's nothing to retry against. This lands with the first real

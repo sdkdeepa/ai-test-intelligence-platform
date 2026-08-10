@@ -165,6 +165,15 @@ class RiskFinding(Base):
 
 
 class TestSuggestion(Base):
+    """One Test Intelligence Engine proposal per (AnalysisRun, applicable
+    test_type) — see architecture.md's Test Intelligence Engine and
+    system-design.md §3, extended for the Sprint 7 output shape.
+
+    `suggested_test_code` is the "proposed test" content (kept under its
+    original Sprint 4 column name rather than renamed, since the meaning is
+    unchanged and a rename would be schema churn with no behavioral point).
+    """
+
     __tablename__ = "test_suggestions"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
@@ -175,6 +184,12 @@ class TestSuggestion(Base):
     suggested_test_code: Mapped[str] = mapped_column(Text, nullable=False)
     rationale: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(default="pending", nullable=False)
+    test_type: Mapped[str] = mapped_column(nullable=False, default="unit")
+    evidence: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    assumptions: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    confidence: Mapped[float] = mapped_column(nullable=False, default=0.5)
+    uncovered_risks: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    recommended_follow_up_validation: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(default=_utcnow, nullable=False)
 
     analysis_run: Mapped["AnalysisRun"] = relationship(back_populates="test_suggestions")
