@@ -23,6 +23,8 @@ const TONE_BY_VALUE: Record<string, 'neutral' | 'info' | 'positive' | 'caution' 
   // suggestion review status
   accepted: 'positive',
   rejected: 'negative',
+  // review request status — "pending"/"rejected" already covered above
+  approved: 'positive',
 }
 
 interface StatusBadgeProps {

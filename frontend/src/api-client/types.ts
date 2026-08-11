@@ -128,3 +128,44 @@ export interface FailureIntelligenceRequest {
   test_case_id?: string
   trigger?: string
 }
+
+export type ReviewRequestStatus = 'pending' | 'approved' | 'rejected'
+
+export interface ReviewRequest {
+  id: string
+  analysis_run_id: string
+  repo_id: string
+  status: ReviewRequestStatus
+  reasons: string[]
+  risk_summary: {
+    risk_score?: number
+    confidence_score?: number
+    categories?: string[]
+    release_recommendation?: string
+    [key: string]: unknown
+  }
+  github_owner: string | null
+  github_repo: string | null
+  github_head_sha: string | null
+  github_pr_number: number | null
+  reviewer: string | null
+  review_reason: string | null
+  created_at: string
+  decided_at: string | null
+}
+
+export interface AuditEvent {
+  id: string
+  review_request_id: string | null
+  analysis_run_id: string | null
+  repo_id: string | null
+  event_type: string
+  actor: string | null
+  payload: Record<string, unknown>
+  created_at: string
+}
+
+export interface ReviewDecisionRequest {
+  reviewer: string
+  reason?: string
+}

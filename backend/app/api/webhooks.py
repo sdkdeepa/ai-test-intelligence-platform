@@ -26,12 +26,22 @@ so GitHub doesn't retry-storm a delivery that was received and understood,
 just intentionally not acted on. Only a bad/missing signature (401) and a
 `pull_request` payload missing fields this platform requires (400) are
 treated as real errors.
+
+Sprint 13: what `PRAnalysisPublisher` actually publishes once the risk run
+completes now depends on governance policy (`governance/policy.py`) — see
+`integrations/github/publisher.py`'s module docstring for the full "AI
+output cannot silently become an approved operational engineering action"
+mechanism. Nothing in this router changes to support that; it already
+handed `on_result` to the publisher, which is where the gating lives.
 """
+
+from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_session_factory
 from app.ingestion.diff import diff_touches_non_test_source, parse_unified_diff
 from app.ingestion.github_webhook import MalformedWebhookPayloadError, parse_pull_request_event
 from app.integrations.github.client import GitHubClient, GitHubClientError, get_github_client
@@ -65,6 +75,7 @@ async def github_webhook(
     orchestrator: AnalysisOrchestrator = Depends(get_orchestrator),
     github_client: GitHubClient = Depends(get_github_client),
     settings: GitHubSettings = Depends(get_github_settings),
+    session_factory: Callable[[], Session] = Depends(get_session_factory),
 ) -> WebhookAck:
     raw_body = await request.body()
 
@@ -118,9 +129,10 @@ async def github_webhook(
 
     publisher = PRAnalysisPublisher(
         github_client=github_client,
+        session_factory=session_factory,
         owner=event.owner,
         repo_name=event.repo_name,
-        repo_id=str(repo.id),
+        repo_id=repo.id,
         head_sha=event.head_sha,
         pr_number=event.pr_number,
         platform_url=settings.platform_base_url,

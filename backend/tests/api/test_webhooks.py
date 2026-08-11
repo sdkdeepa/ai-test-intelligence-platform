@@ -31,13 +31,31 @@ index 1111111..2222222 100644
          raise ValueError("invalid credentials")
 """
 
-_TEST_ONLY_DIFF = """\
-diff --git a/tests/test_login.py b/tests/test_login.py
+# Deliberately touches none of risk/heuristics.py's file-path or content
+# patterns (no auth/api/schema/dependency/config/retry/error keywords) — the
+# "governance never triggers" baseline used by tests exercising ordinary
+# auto-publish behavior, as distinct from _SOURCE_DIFF above (which
+# deliberately DOES trip the authentication_authorization category, and is
+# used by the Sprint 13 governance-gating tests further down this file).
+_LOW_RISK_SOURCE_DIFF = """\
+diff --git a/app/utils/formatting.py b/app/utils/formatting.py
 index 1111111..2222222 100644
---- a/tests/test_login.py
-+++ b/tests/test_login.py
+--- a/app/utils/formatting.py
++++ b/app/utils/formatting.py
+@@ -3,6 +3,6 @@ def format_duration(seconds):
+     minutes = seconds // 60
+     remainder = seconds % 60
+-    return f"{minutes}m"
++    return f"{minutes}m {remainder}s"
+"""
+
+_TEST_ONLY_DIFF = """\
+diff --git a/tests/test_formatting.py b/tests/test_formatting.py
+index 1111111..2222222 100644
+--- a/tests/test_formatting.py
++++ b/tests/test_formatting.py
 @@ -1,2 +1,3 @@
- def test_login():
+ def test_format_duration():
 +    pass
 """
 
@@ -216,7 +234,7 @@ def test_diff_fetch_failure_is_ignored_gracefully(client):
 
 
 def test_source_change_triggers_both_engines_and_publishes_combined_comment(client):
-    fake_client = FakeGitHubClient(_SOURCE_DIFF)
+    fake_client = FakeGitHubClient(_LOW_RISK_SOURCE_DIFF)
     _override_github(fake_client)
     repo_id = _register_repo(client)
 
@@ -236,6 +254,10 @@ def test_source_change_triggers_both_engines_and_publishes_combined_comment(clie
     assert status["repo"] == "widgets"
     assert status["sha"] == "abc123def456"
     assert status["context"] == "ai-test-intelligence/risk"
+    # Not gated by governance (a low-risk, no-flagged-category diff), so
+    # this is the ordinary auto-publish path: success or failure, never
+    # pending — pending is only for review-required runs (see
+    # test_authentication_change_triggers_review_required below).
     assert status["state"] in ("success", "failure")
 
     comment = fake_client.comments[0]
@@ -297,9 +319,10 @@ def test_pr_comment_never_contains_full_rationale_or_test_source(client):
 def test_pr_comment_includes_concise_recommended_tests_list(client):
     """End-to-end check that the webhook -> engine -> comment path produces
     actual per-suggestion recommendations (test_type + short reason), not
-    just aggregate counts.
+    just aggregate counts. Uses the low-risk diff deliberately — this is
+    about the ordinary findings comment's content, not governance.
     """
-    fake_client = FakeGitHubClient(_SOURCE_DIFF)
+    fake_client = FakeGitHubClient(_LOW_RISK_SOURCE_DIFF)
     _override_github(fake_client)
     _register_repo(client)
 
@@ -310,3 +333,143 @@ def test_pr_comment_includes_concise_recommended_tests_list(client):
     assert "Recommended Tests" in comment_body
     # Each recommendation line is bulleted and names its test_type in bold.
     assert "- **unit**:" in comment_body
+
+
+# --- Sprint 13: governance end-to-end (webhook -> review-required -> decision) ---
+
+
+def test_authentication_change_triggers_review_required_not_auto_publish(client):
+    """The core Sprint 13 invariant, exercised through the full webhook
+    path: an authentication-touching diff must land in the review queue as
+    `pending`, not resolve to an automatic success/failure commit status.
+    """
+    fake_client = FakeGitHubClient(_SOURCE_DIFF)
+    _override_github(fake_client)
+    _register_repo(client)
+
+    response = _signed_post(client, load_webhook_payload("pull_request_opened"))
+    risk_run_id = response.json()["risk_analysis_run_id"]
+
+    assert _wait_until(lambda: len(fake_client.statuses) == 1)
+    assert fake_client.statuses[0]["state"] == "pending"
+    assert "review-queue" in fake_client.statuses[0]["target_url"]
+
+    assert _wait_until(lambda: len(fake_client.comments) == 1)
+    assert "Human Review Required" in fake_client.comments[0]["body"]
+    assert "authentication or authorization change" in fake_client.comments[0]["body"]
+
+    queue_response = client.get("/api/v1/review-queue")
+    assert queue_response.status_code == 200
+    pending = queue_response.json()
+    assert len(pending) == 1
+    assert pending[0]["status"] == "pending"
+    assert pending[0]["analysis_run_id"] == risk_run_id
+    assert "authentication_or_authorization_change" in pending[0]["reasons"]
+    assert pending[0]["github_pr_number"] == 42
+
+
+def test_approving_review_request_publishes_success_status_and_decision_comment(client):
+    fake_client = FakeGitHubClient(_SOURCE_DIFF)
+    _override_github(fake_client)
+    _register_repo(client)
+
+    _signed_post(client, load_webhook_payload("pull_request_opened"))
+    assert _wait_until(lambda: len(fake_client.comments) == 1)  # the review-required comment
+
+    review_request_id = client.get("/api/v1/review-queue").json()[0]["id"]
+
+    approve_response = client.post(
+        f"/api/v1/review-queue/{review_request_id}/approve",
+        json={"reviewer": "alice", "reason": "Reviewed the auth change manually, looks correct."},
+    )
+    assert approve_response.status_code == 200
+    body = approve_response.json()
+    assert body["status"] == "approved"
+    assert body["reviewer"] == "alice"
+    assert body["decided_at"] is not None
+
+    # Two statuses now: the original `pending`, then this decision's `success`.
+    assert len(fake_client.statuses) == 2
+    assert fake_client.statuses[-1]["state"] == "success"
+    # Two comments: the original review-required notice, then the decision.
+    assert len(fake_client.comments) == 2
+    assert "Approved" in fake_client.comments[-1]["body"]
+    assert "alice" in fake_client.comments[-1]["body"]
+
+    # No longer pending.
+    assert client.get("/api/v1/review-queue").json() == []
+
+
+def test_rejecting_review_request_publishes_failure_status(client):
+    fake_client = FakeGitHubClient(_SOURCE_DIFF)
+    _override_github(fake_client)
+    _register_repo(client)
+
+    _signed_post(client, load_webhook_payload("pull_request_opened"))
+    assert _wait_until(lambda: len(fake_client.comments) == 1)
+    review_request_id = client.get("/api/v1/review-queue").json()[0]["id"]
+
+    reject_response = client.post(
+        f"/api/v1/review-queue/{review_request_id}/reject",
+        json={"reviewer": "bob", "reason": "Needs more tests first."},
+    )
+    assert reject_response.status_code == 200
+    assert reject_response.json()["status"] == "rejected"
+
+    assert fake_client.statuses[-1]["state"] == "failure"
+    assert "Rejected" in fake_client.comments[-1]["body"]
+
+
+def test_review_request_cannot_be_decided_twice(client):
+    fake_client = FakeGitHubClient(_SOURCE_DIFF)
+    _override_github(fake_client)
+    _register_repo(client)
+
+    _signed_post(client, load_webhook_payload("pull_request_opened"))
+    assert _wait_until(lambda: len(fake_client.comments) == 1)
+    review_request_id = client.get("/api/v1/review-queue").json()[0]["id"]
+
+    first = client.post(f"/api/v1/review-queue/{review_request_id}/approve", json={"reviewer": "alice"})
+    assert first.status_code == 200
+
+    second = client.post(f"/api/v1/review-queue/{review_request_id}/reject", json={"reviewer": "bob"})
+    assert second.status_code == 409
+
+
+def test_audit_trail_records_review_lifecycle(client):
+    fake_client = FakeGitHubClient(_SOURCE_DIFF)
+    _override_github(fake_client)
+    _register_repo(client)
+
+    _signed_post(client, load_webhook_payload("pull_request_opened"))
+    assert _wait_until(lambda: len(fake_client.comments) == 1)
+    review_request_id = client.get("/api/v1/review-queue").json()[0]["id"]
+
+    client.post(f"/api/v1/review-queue/{review_request_id}/approve", json={"reviewer": "alice", "reason": "looks fine"})
+
+    events_response = client.get(f"/api/v1/review-queue/{review_request_id}/audit-events")
+    assert events_response.status_code == 200
+    events = events_response.json()
+    event_types = [e["event_type"] for e in events]
+    # policy_evaluated always fires first (the gate ran), review_required
+    # once it tripped, review_approved once a human decided — in that order,
+    # since AuditEventRepository.list_by_review_request orders by created_at.
+    assert event_types == ["review_required", "review_approved"]
+    assert events[-1]["actor"] == "alice"
+    assert events[-1]["payload"]["reason"] == "looks fine"
+
+
+def test_review_request_evidence_diff_does_not_reach_review_required_comment(client):
+    """Even the review-required notice stays within the "no full model
+    output" rule — it names *why* (rule slugs), not the underlying evidence
+    strings or rationale.
+    """
+    fake_client = FakeGitHubClient(_SOURCE_DIFF)
+    _override_github(fake_client)
+    _register_repo(client)
+
+    _signed_post(client, load_webhook_payload("pull_request_opened"))
+    assert _wait_until(lambda: len(fake_client.comments) == 1)
+
+    comment_body = fake_client.comments[0]["body"]
+    assert len(comment_body) < 1000

@@ -280,3 +280,85 @@ class LLMInvocation(Base):
     created_at: Mapped[datetime] = mapped_column(default=_utcnow, nullable=False)
 
     analysis_run: Mapped["AnalysisRun"] = relationship(back_populates="llm_invocations")
+
+
+class ReviewRequest(Base):
+    """One human-review gate on a completed Risk Engine assessment (Sprint 13
+    — see docs/architecture.md §5's Sprint 13 status note for the full flow).
+
+    Created only when `governance/policy.py`'s `evaluate_risk_policy` finds
+    at least one triggered rule; `reasons` is that rule list, persisted as
+    plain strings (`PolicyReason.detail`) rather than a FK to some separate
+    "policy rule" table — the rules themselves are code (policy.py), not
+    data, so there's nothing to normalize against.
+
+    `status` is mutable current-state (pending -> approved/rejected); the
+    *history* of how it got there is `AuditEvent`, not this table — this
+    table always reflects "what's true right now", never "what happened".
+
+    `github_*` columns are nullable and only populated when this review
+    request originated from a GitHub webhook-triggered run
+    (`integrations/github/publisher.py`); a manually-triggered analysis run
+    (`api/risk.py`) that trips policy still gets a `ReviewRequest` (so it's
+    visible in the dashboard's pending-approvals view) but has no PR to
+    publish a decision back to, so these stay `NULL`.
+
+    `risk_summary` is a small, already-redacted structured snapshot (score,
+    categories, release_recommendation — not the full `rationale` or raw
+    evidence text) captured at creation time, so the review queue and its
+    API don't need to join back through `AnalysisRun` -> `RiskFinding` just
+    to render a list.
+    """
+
+    __tablename__ = "review_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    analysis_run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("analysis_runs.id"), nullable=False, index=True)
+    repo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("repositories.id"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(nullable=False, default="pending")  # pending | approved | rejected
+    reasons: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    risk_summary: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+
+    github_owner: Mapped[str | None]
+    github_repo: Mapped[str | None]
+    github_head_sha: Mapped[str | None]
+    github_pr_number: Mapped[int | None]
+
+    reviewer: Mapped[str | None]
+    review_reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(default=_utcnow, nullable=False)
+    decided_at: Mapped[datetime | None]
+
+    analysis_run: Mapped["AnalysisRun"] = relationship()
+    audit_events: Mapped[list["AuditEvent"]] = relationship(back_populates="review_request")
+
+
+class AuditEvent(Base):
+    """Append-only governance audit log (Sprint 13).
+
+    Deliberately immutable by *API design*, not by a database trigger or
+    runtime check: `governance/AuditEventRepository` (persistence/
+    repositories.py) is not a `BaseRepository` subclass and exposes only
+    `record()` (insert) and `list_*()` (read) — there is no update or delete
+    method to call in the first place. `payload` is always redacted
+    (`governance/redaction.py`'s `redact_payload`) before this row is ever
+    constructed — see `review_service.py`, the only place that builds one.
+
+    `review_request_id` is nullable because not every audit-worthy event has
+    a review request yet (e.g. `policy_evaluated` events for runs where no
+    rule triggered — a record that governance *looked* and found nothing,
+    useful for proving the gate ran at all, not just when it fired).
+    """
+
+    __tablename__ = "audit_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
+    review_request_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("review_requests.id"), index=True)
+    analysis_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("analysis_runs.id"), index=True)
+    repo_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("repositories.id"), index=True)
+    event_type: Mapped[str] = mapped_column(nullable=False)
+    actor: Mapped[str | None]  # "system" for automated events, reviewer identity for decisions
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(default=_utcnow, nullable=False)
+
+    review_request: Mapped["ReviewRequest | None"] = relationship(back_populates="audit_events")

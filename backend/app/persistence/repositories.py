@@ -14,11 +14,13 @@ from sqlalchemy.orm import Session
 
 from app.persistence.models import (
     AnalysisRun,
+    AuditEvent,
     Commit,
     FailureFinding,
     FlakyTestFinding,
     LLMInvocation,
     LLMProviderConfig,
+    ReviewRequest,
     RiskFinding,
     TestCase,
     TestResult,
@@ -202,3 +204,68 @@ class LLMInvocationRepository(BaseRepository[LLMInvocation]):
 
     def list_by_run(self, analysis_run_id: uuid.UUID) -> list[LLMInvocation]:
         return list(self.session.scalars(select(LLMInvocation).where(LLMInvocation.analysis_run_id == analysis_run_id)))
+
+
+class ReviewRequestRepository(BaseRepository[ReviewRequest]):
+    """Mutable current-state repository — `status`/`reviewer`/`review_reason`/
+    `decided_at` are updated in place on approve/reject (see
+    governance/review_service.py). This is deliberately NOT append-only;
+    `AuditEventRepository` below is the append-only history of how a
+    ReviewRequest reached its current status.
+    """
+
+    model = ReviewRequest
+
+    def list_by_repo(self, repo_id: uuid.UUID, status: str | None = None) -> list[ReviewRequest]:
+        stmt = select(ReviewRequest).where(ReviewRequest.repo_id == repo_id)
+        if status is not None:
+            stmt = stmt.where(ReviewRequest.status == status)
+        return list(self.session.scalars(stmt))
+
+    def list_pending(self) -> list[ReviewRequest]:
+        """Across all repositories — what the dashboard's pending-approvals
+        view reads (Sprint 13's "update dashboard to display pending
+        approvals" requirement isn't scoped to one repo at a time).
+        """
+        return list(self.session.scalars(select(ReviewRequest).where(ReviewRequest.status == "pending")))
+
+
+class AuditEventRepository:
+    """Append-only governance audit log — deliberately NOT a
+    `BaseRepository` subclass, since `BaseRepository` exposes `delete()`.
+    Immutability here is enforced by this class's API surface simply never
+    offering an update or delete method, not by a runtime guard — there is
+    no code path in this repository that can mutate a row once `record()`
+    has inserted it. See `AuditEvent`'s docstring in models.py.
+    """
+
+    model = AuditEvent
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def record(self, event: AuditEvent) -> AuditEvent:
+        self.session.add(event)
+        self.session.flush()
+        return event
+
+    def get(self, id_: uuid.UUID) -> AuditEvent | None:
+        return self.session.get(AuditEvent, id_)
+
+    def list_by_review_request(self, review_request_id: uuid.UUID) -> list[AuditEvent]:
+        return list(
+            self.session.scalars(
+                select(AuditEvent)
+                .where(AuditEvent.review_request_id == review_request_id)
+                .order_by(AuditEvent.created_at.asc())
+            )
+        )
+
+    def list_by_analysis_run(self, analysis_run_id: uuid.UUID) -> list[AuditEvent]:
+        return list(
+            self.session.scalars(
+                select(AuditEvent)
+                .where(AuditEvent.analysis_run_id == analysis_run_id)
+                .order_by(AuditEvent.created_at.asc())
+            )
+        )

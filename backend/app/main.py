@@ -8,6 +8,7 @@ from app.api.failure_intelligence import router as failure_intelligence_router
 from app.api.health import router as health_router
 from app.api.metrics import router as metrics_router
 from app.api.repositories import router as repositories_router
+from app.api.review import router as review_router
 from app.api.risk import router as risk_router
 from app.api.test_intelligence import repo_router as test_intelligence_repo_router
 from app.api.test_intelligence import suggestion_router as test_suggestion_router
@@ -16,6 +17,7 @@ from app.config import get_settings
 from app.observability.eval_datasets import sync_all_evaluation_datasets
 from app.observability.langsmith_client import get_langsmith_client
 from app.observability.logging import configure_logging, get_logger
+from app.persistence.database import SessionLocal
 
 settings = get_settings()
 configure_logging(settings.log_level, settings.environment)
@@ -59,6 +61,12 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Sprint 13: background-thread governance writes (review-request
+    # creation, GitHub decision publishing) need a session factory that
+    # outlives a single request — see api/deps.py's get_session_factory.
+    # Defaults to the process-global SessionLocal; tests/api/conftest.py's
+    # `client` fixture overrides this to the test's isolated DB.
+    app.state.session_factory = SessionLocal
     app.include_router(health_router)
     app.include_router(metrics_router)
     app.include_router(repositories_router)
@@ -68,6 +76,7 @@ def create_app() -> FastAPI:
     app.include_router(failure_intelligence_router)
     app.include_router(analysis_runs_router)
     app.include_router(webhooks_router)
+    app.include_router(review_router)
     return app
 
 

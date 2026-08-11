@@ -15,10 +15,11 @@ orchestrator contains no analysis logic" true while still satisfying
 
 import uuid
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.orm import Session
 
+from app.governance.redaction import redact_payload
 from app.observability.logging import get_logger
 from app.observability.metrics import record_analysis_run_terminal_state
 from app.orchestration.engine import AnalysisContext, AnalysisEngine, AnalysisResult
@@ -75,6 +76,13 @@ class AnalysisOrchestrator:
         comment; nothing here is GitHub-specific). Runs on the TaskQueue's
         worker thread, same as `_on_transition` — callers must not assume
         the calling thread.
+
+        Every string value in `inputs` is redacted (`governance/redaction.py`)
+        before `AnalysisContext` is built — i.e. before any engine has a
+        chance to embed it into an LLM prompt (Sprint 13: "sensitive-data
+        redaction before LLM ... persistence"). Applied here, centrally,
+        rather than per-engine, so every engine and every trigger source
+        gets it automatically with no per-engine opt-in.
         """
         engine: AnalysisEngine = self._registry.get(engine_type)  # raises before anything is persisted
 
@@ -86,6 +94,7 @@ class AnalysisOrchestrator:
         log = log.bind(analysis_run_id=str(analysis_run_id))
         log.info("analysis_run_submitted")
 
+        redacted_inputs = cast("dict[str, Any]", redact_payload(inputs or {}))
         context = AnalysisContext(
             analysis_run_id=analysis_run_id,
             repo_id=repo_id,
@@ -93,7 +102,7 @@ class AnalysisOrchestrator:
             pr_number=pr_number,
             trigger=trigger,
             engine_type=engine_type,
-            inputs=inputs or {},
+            inputs=redacted_inputs,
             correlation_id=correlation_id,
             trace_id=trace_id,
         )
