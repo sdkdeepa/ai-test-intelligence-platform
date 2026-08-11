@@ -1,0 +1,9 @@
+{
+  "action": "opened",
+  "pull_request": {
+    "number": 42
+  },
+  "repository": {
+    "name": "widgets"
+  }
+}

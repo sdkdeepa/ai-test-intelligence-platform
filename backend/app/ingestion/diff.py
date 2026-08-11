@@ -1,12 +1,12 @@
 """Git diff ingestion model.
 
-Scope note: this is the diff-parsing piece of ingestion only — turning a
-unified diff (as `git diff` / a GitHub PR diff produces) into a structured
-model engines can reason about. Fetching that diff from GitHub, webhook
-verification, and event normalization are the "Git/PR Adapter" pieces of
-`ingestion/` per architecture.md §4's layout, and remain future scope
-(Sprint 10, GitHub PR integration) — this sprint's Risk Engine takes diff
-text directly as input.
+Scope note: this is the diff-parsing piece of ingestion — turning a unified
+diff (as `git diff` / a GitHub PR diff produces) into a structured model
+engines can reason about. Fetching that diff from GitHub is
+`integrations/github/client.py`'s job; webhook verification and event
+normalization are `integrations/github/signature.py` and
+`ingestion/github_webhook.py`'s (Sprint 12, GitHub PR integration) — this
+module stays focused on the diff text itself, however it arrived.
 """
 
 import re
@@ -124,3 +124,25 @@ def parse_unified_diff(diff_text: str) -> GitDiff:
 
     flush_file()
     return GitDiff(files=files)
+
+
+_TEST_FILE_RX = re.compile(
+    r"(^|/)(test_[^/]+|[^/]+_test)\.[a-zA-Z0-9]+$"  # test_foo.py / foo_test.py
+    r"|(^|/)tests?/"  # anywhere under a test(s)/ directory
+    r"|\.(test|spec)\.[a-zA-Z0-9]+$",  # foo.test.ts / foo.spec.tsx
+    re.IGNORECASE,
+)
+
+
+def diff_touches_non_test_source(diff: GitDiff) -> bool:
+    """True if at least one changed path in `diff` doesn't look like a test
+    file — the heuristic `app/api/webhooks.py` uses to decide whether
+    triggering the Test Intelligence Engine is worthwhile for a given PR.
+
+    Deliberately simple and deterministic (no LLM call): a diff that only
+    touches test files, fixtures, or is empty has no non-test code for the
+    engine to suggest coverage for, so triggering it would just burn a
+    provider call for a run that heuristics.py's own `compute_applicability`
+    would likely find nothing applicable in anyway.
+    """
+    return any(not _TEST_FILE_RX.search(path) for path in diff.changed_paths)

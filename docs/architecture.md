@@ -91,6 +91,14 @@ flowchart TB
   exposed via the API to the dashboard and back to the originating PR as a status check
   / comment.
 
+**Implementation status (Sprint 12):** the PR half of this flow is live for GitHub —
+`POST /api/v1/webhooks/github` is the webhook receiver; `integrations/github/` is the
+"Provider Abstraction Layer" equivalent for the GitHub side of this diagram (a
+`GitHubClient` interface, same pattern as `LLMProvider`), handling both the diff fetch
+that feeds analysis and the status-check/PR-comment publish that closes the loop back to
+GitHub. CI webhook ingestion (the other half of this diagram's "webhook" arrow) remains
+future scope — see system-design.md §4's `/webhooks/ci` entry.
+
 ## 3. Component Diagram
 
 ```mermaid
@@ -156,37 +164,33 @@ ai-test-intelligence-platform/
 ├── README.md
 ├── docs/
 │   ├── architecture.md
-│   ├── system-design.md
-│   └── development-roadmap.md
+│   └── system-design.md
 ├── backend/
-│   ├── api/                # FastAPI routers, request/response schemas
-│   ├── ingestion/           # Git/PR + CI webhook adapters, event normalization
-│   ├── orchestration/       # TaskQueue interface + in-process implementation
-│   ├── analysis/
-│   │   ├── risk/            # Coverage/risk analyzer engine
-│   │   ├── test_intelligence/ # Test Intelligence Engine
-│   │   ├── failure_intelligence/ # Failure Intelligence Engine
-│   │   └── prompts/          # Versioned prompt templates, shared across engines
-│   ├── providers/            # LLM provider abstraction + implementations
-│   ├── persistence/           # SQLAlchemy models, repositories, Alembic migrations
-│   ├── observability/          # Logging, metrics, tracing setup
-│   ├── config.py
+│   ├── app/
+│   │   ├── api/                # FastAPI routers, request/response schemas, GitHub webhook endpoint
+│   │   ├── ingestion/           # Diff parsing, GitHub PR webhook event normalization
+│   │   ├── integrations/
+│   │   │   └── github/           # GitHubClient abstraction, HMAC verification, PR comment/status publishing
+│   │   ├── orchestration/       # TaskQueue interface + in-process implementation
+│   │   ├── analysis/
+│   │   │   ├── risk/            # Coverage/risk analyzer engine
+│   │   │   ├── test_intelligence/ # Test Intelligence Engine
+│   │   │   ├── failure_intelligence/ # Failure Intelligence Engine
+│   │   │   └── prompts/          # Versioned prompt templates, per engine
+│   │   ├── providers/            # LLM provider abstraction + implementations
+│   │   ├── persistence/           # SQLAlchemy models, repositories
+│   │   └── observability/          # Logging, metrics, LangSmith tracing setup
+│   ├── migrations/              # Alembic migrations
 │   └── tests/
-│       ├── unit/
-│       └── integration/
 ├── frontend/
 │   ├── src/
 │   │   ├── pages/            # Route-level views (Repo overview, Risk, Suggestions, Flaky Tests)
 │   │   ├── components/        # Shared presentational components
 │   │   ├── api-client/         # Typed API client (generated or hand-written)
 │   │   └── state/               # Data-fetching/cache state (TanStack Query)
-│   └── tests/
-├── infra/
-│   ├── docker/               # Dockerfiles, docker-compose for local dev
-│   └── ci/                    # Reusable CI workflow fragments
-├── scripts/                   # One-off operational/dev scripts
+│   └── e2e/                   # Playwright smoke tests
 └── .github/
-    └── workflows/             # ci.yml, integration.yml, etc.
+    └── workflows/             # ci.yml, integration.yml, e2e.yml, docker.yml, live-smoke.yml
 ```
 
 This is a monorepo: backend and frontend evolve together, and a single PR can span both
@@ -201,6 +205,11 @@ ownership model.
 - **`ingestion/`** depends only on `orchestration/`. It translates external events
   (GitHub webhook payloads, CI callback payloads) into internal domain events and hands
   them to the orchestrator. It has no knowledge of analysis engines.
+- **`integrations/github/`** has no dependencies on any other backend module besides
+  `observability/` (for logging) — a pure abstraction over the GitHub REST API (diff
+  fetch, commit status, PR comments) plus HMAC signature verification, deliberately kept
+  isolated the same way `providers/` is. `api/webhooks.py`, not this module, is what
+  calls the orchestrator — see its Sprint 12 status note below.
 - **`orchestration/`** depends on `analysis/` engines by interface only (each engine
   implements a common `AnalysisEngine.run(context) -> Result` contract). The
   orchestrator decides *when* and *in what order* engines run; it has no analysis logic
@@ -215,6 +224,30 @@ ownership model.
 This layering means a dependency-direction rule holds throughout: `api` and `ingestion`
 → `orchestration` → `analysis engines` → `providers` / `persistence`. Nothing points
 backward.
+
+**Implementation status (Sprint 12):** GitHub PR integration is live —
+`app/api/webhooks.py` (`POST /api/v1/webhooks/github`) is the entry point; it verifies
+the HMAC-SHA256 signature (`integrations/github/signature.py`) against the raw request
+body, normalizes the payload (`ingestion/github_webhook.py`), fetches the PR's diff via
+`GitHubClient` (`integrations/github/client.py`), and triggers Risk analysis (always)
+plus Test Intelligence analysis (when `ingestion/diff.py`'s `diff_touches_non_test_source`
+heuristic finds non-test source in the diff) through the same
+`AnalysisOrchestrator.submit()` every other trigger source uses. `AnalysisOrchestrator`
+gained an optional `on_result` completion-hook parameter this sprint (generic, not
+GitHub-specific) so a caller can react once a run reaches a terminal state without
+polling; `integrations/github/publisher.py`'s `PRAnalysisPublisher` uses it to join the
+Risk and Test Intelligence completions (which run on independent background threads,
+completing in no guaranteed order) into one commit status + one PR comment. PR comments
+deliberately never include full model output — no `RiskFinding.rationale`, no
+`TestSuggestion.suggested_test_code` — only scores, category labels, a capped findings
+list, and a link back to the platform dashboard (`integrations/github/comment.py`).
+`GITHUB_API_TOKEN` unset falls back to a `NullGitHubClient` (webhooks still process and
+trigger analysis, just without publishing back to GitHub), same "no key, no provider"
+rule as `ProviderRegistry`. The Statuses API is used for the check result rather than
+the Checks API, since Checks requires a GitHub App installation (a different auth model)
+where Statuses works with a plain token — see `RestGitHubClient`'s docstring for the
+full rationale; a GitHub App integration remains a natural later increment if richer
+Checks UI is ever needed.
 
 ## 6. Frontend Organization
 
@@ -363,25 +396,49 @@ Two scoping decisions worth recording:
 - **API contract tests**: request/response shape validation per endpoint.
 - **Frontend**: component tests (Vitest + React Testing Library) once frontend code
   exists; end-to-end (Playwright) deferred until there's a UI worth covering.
+- **GitHub webhook tests (Sprint 12)**: `tests/api/test_webhooks.py` drives the full
+  webhook -> signature verification -> orchestration -> engine -> publish flow through
+  FastAPI's TestClient, with a `FakeGitHubClient` (implementing the `GitHubClient`
+  interface) standing in for the real GitHub API — no live repository or network access
+  required, same "fake the boundary interface" pattern `MockProvider` uses for LLM
+  calls. `tests/integrations/github/` covers signature verification, comment/status
+  text building (including an explicit assertion that no full model output — raw
+  rationale text, generated test source — ever appears in what gets built), the REST
+  client against an `httpx.MockTransport`, and `PRAnalysisPublisher`'s completion-
+  coordination logic (both orderings of risk/test-intelligence completion, failure
+  paths, duplicate-callback safety) directly, without going through HTTP.
 
 ## 10. CI/CD Strategy
 
-- **`ci.yml`**: lint, type-check, and unit tests for backend and frontend, on every push
-  and PR. This is the required check for merge.
-- **`integration.yml`**: spins up a PostgreSQL service container and runs backend
-  integration tests. Required for merge once backend code exists.
-- **Live provider smoke test workflow**: manually triggered only (`workflow_dispatch`),
-  runs the provider contract tests against real Anthropic/OpenAI APIs. Never runs
-  automatically, to keep normal CI free of external API cost and flakiness.
-- **Docker image build/publish**: deferred to the sprint that introduces deployable
-  artifacts — not needed while the platform runs locally/in CI only.
-- Branch protection on `main` requires `ci.yml` (and `integration.yml`, once it exists)
-  to pass.
+- **`ci.yml`**: Ruff lint, Ruff format check, mypy, and PyTest with coverage for the
+  backend; oxlint, Vitest, and a production build for the frontend. Runs on every push
+  and PR; required for merge.
+- **`integration.yml`**: spins up a PostgreSQL 16 service container, runs Alembic
+  migrations (upgrade to head, then a downgrade/upgrade round trip), and runs the
+  PostgreSQL integration suite against it. Required for merge.
+- **`e2e.yml`**: installs Playwright + Chromium and runs `frontend/e2e/` against a real
+  backend (MockProvider, disposable SQLite) and a real Vite dev server, both started by
+  Playwright itself. Required for merge.
+- **`docker.yml`**: builds the backend and frontend Docker images independently, then
+  validates `docker-compose.yml` (`docker compose config` + `docker compose build`).
+  Build-only — nothing is pushed to a registry yet; that remains deferred until the
+  platform has an actual deployment target (§11).
+- **`live-smoke.yml`**: manually triggered only (`workflow_dispatch`), runs the Anthropic
+  provider contract tests against the real API using an `ANTHROPIC_API_KEY` repository
+  secret. Never runs automatically, to keep normal CI free of external API cost and
+  flakiness — the only workflow in the repo permitted to spend real API budget.
+- Branch protection on `main` requires `ci.yml`, `integration.yml`, `e2e.yml`, and
+  `docker.yml` to pass.
 
 ## 11. Deliberately Deferred
 
 To keep this document honest about scope, the following are acknowledged as future
 decisions, not oversights: authentication/authorization model, multi-tenancy,
-deployment target (container platform vs. serverless), and a distributed task queue
+deployment target (container platform vs. serverless), a distributed task queue
 (Celery/Temporal) to replace the in-process orchestrator once real concurrency demands
-it. See [development-roadmap.md](development-roadmap.md) for sequencing.
+it, CI webhook ingestion (the failure-intelligence-triggering half of the ingestion
+diagram in §2 — GitHub PR ingestion landed in Sprint 12, CI ingestion has not), a
+GitHub App integration (§5's Sprint 12 status note explains why the Statuses API was
+used instead for now), and a per-repository configurable risk-gating policy (Sprint 12's
+`commit_status_state` hardcodes "only `block` fails the check" — see
+`integrations/github/comment.py`).

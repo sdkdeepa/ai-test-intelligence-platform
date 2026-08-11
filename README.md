@@ -31,6 +31,8 @@ engineering sprints — not a tutorial or hackathon project.
 - **Frontend:** React, TypeScript, Vite, React Router, TanStack Query
 - **LLM providers:** Anthropic Claude (primary), Mock (test/CI) — OpenAI not yet implemented
 - **Persistence:** PostgreSQL, SQLAlchemy 2.0, Alembic
+- **GitHub integration:** PR webhook ingestion, risk + test-suggestion analysis
+  triggering, commit status + PR comment publishing (see GitHub PR Integration below)
 - **Observability:** Prometheus-compatible `/metrics`, structured JSON logging, optional
   LangSmith trace/experiment/dataset integration (disabled by default — see
   `docs/architecture.md`)
@@ -81,4 +83,36 @@ workflows are required checks on `main`; a fifth is opt-in and manual.
 Test results, coverage reports, and the Playwright HTML report are uploaded as workflow
 artifacts (14-day retention) on every run, pass or fail, so a CI failure can be
 diagnosed without re-running locally.
+
+## GitHub PR Integration
+
+The platform can trigger AI-backed analysis directly from GitHub pull requests and
+publish the results back as a commit status check and a PR comment.
+
+**Setup:**
+
+1. Register the repository with the platform first (`POST /api/v1/repositories`) — the
+   webhook is ignored for any repository whose GitHub URL isn't already registered.
+2. Set two environment variables (see `.env.example`):
+   - `GITHUB_WEBHOOK_SECRET` — required. Requests without a valid
+     `X-Hub-Signature-256` HMAC-SHA256 signature against this secret are rejected with
+     401. The webhook endpoint fails closed if this isn't set at all.
+   - `GITHUB_API_TOKEN` — required to actually fetch PR diffs and publish status
+     checks/comments back to GitHub. Without it, webhooks are still received and
+     verified and analysis still runs, but nothing is published back to GitHub (a
+     `NullGitHubClient` no-ops the outbound calls, same "no key, no provider" pattern
+     `PROVIDER_ANTHROPIC_API_KEY` follows).
+3. Point a GitHub webhook at `POST /api/v1/webhooks/github` for the `pull_request` event,
+   using the same secret as `GITHUB_WEBHOOK_SECRET`.
+
+**What happens on `opened` / `synchronize` / `reopened`:**
+
+- Risk analysis is always triggered.
+- Test Intelligence analysis is triggered only when the diff touches non-test source
+  (a deterministic heuristic — no LLM call spent deciding this).
+- Once analysis completes, a commit status check (`ai-test-intelligence/risk` context)
+  and a single PR comment are published, covering overall risk, top findings,
+  recommended tests (when triggered), and a link back to the full analysis in the
+  platform dashboard. **The comment never includes full model output** — no raw AI
+  rationale text, no full generated test source — by design.
 

@@ -1,0 +1,27 @@
+{
+  "action": "closed",
+  "number": 42,
+  "pull_request": {
+    "number": 42,
+    "title": "Fix login validation",
+    "head": {
+      "sha": "abc123def456",
+      "ref": "fix-login"
+    },
+    "base": {
+      "sha": "111222333444",
+      "ref": "main"
+    }
+  },
+  "repository": {
+    "name": "widgets",
+    "full_name": "acme/widgets",
+    "html_url": "https://github.com/acme/widgets",
+    "owner": {
+      "login": "acme"
+    }
+  },
+  "sender": {
+    "login": "octocat"
+  }
+}
