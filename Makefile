@@ -1,4 +1,4 @@
-.PHONY: install backend frontend test build docker-up docker-down clean
+.PHONY: install backend frontend test test-frontend e2e build docker-up docker-down clean
 
 install:
 	cd backend && python3 -m venv .venv && .venv/bin/pip install --upgrade pip && .venv/bin/pip install -e ".[dev]"
@@ -12,6 +12,12 @@ frontend:
 
 test:
 	cd backend && .venv/bin/pytest
+
+test-frontend:
+	cd frontend && npm run test
+
+e2e:
+	cd frontend && npm run e2e
 
 build:
 	cd frontend && npm run build

@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.analysis_runs import router as analysis_runs_router
 from app.api.failure_intelligence import router as failure_intelligence_router
 from app.api.health import router as health_router
 from app.api.metrics import router as metrics_router
@@ -47,6 +49,15 @@ def _sync_langsmith_datasets_best_effort() -> None:
 
 def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
+    # Permissive CORS: there's no auth model yet (development-roadmap.md's
+    # deferred-decisions list), so origin restriction wouldn't gate anything
+    # real. Revisit once auth exists — this should narrow at the same time.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.include_router(health_router)
     app.include_router(metrics_router)
     app.include_router(repositories_router)
@@ -54,6 +65,7 @@ def create_app() -> FastAPI:
     app.include_router(test_intelligence_repo_router)
     app.include_router(test_suggestion_router)
     app.include_router(failure_intelligence_router)
+    app.include_router(analysis_runs_router)
     return app
 
 

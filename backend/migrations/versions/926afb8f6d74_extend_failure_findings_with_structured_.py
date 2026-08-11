@@ -46,7 +46,38 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Downgrade schema."""
+    """Downgrade schema.
+
+    Re-adding `test_result_id NOT NULL` here is intentionally left as a
+    strict, fail-loud operation, not softened with a data migration. On any
+    database containing a `FailureFinding` row with `test_result_id IS NULL`
+    — which is normal, legitimate data once the Failure Intelligence Engine
+    is in real use (Sprint 8's design: it analyzes raw failure text that may
+    have no corresponding persisted TestResult row, and correctly leaves
+    test_result_id unset in that case) — this ALTER COLUMN will raise
+    NotNullViolation and abort the downgrade. That's correct, not a bug:
+
+    - The old (NOT NULL) and new (nullable) schemas encode genuinely
+      different invariants. A NULL test_result_id has no valid
+      representation in the old schema.
+    - The only ways to make the downgrade "succeed" on such data are
+      destructive: delete the rows that don't fit (silently discards real
+      analysis results) or backfill them with a fabricated placeholder
+      TestResult (worse — invents a false reference that never happened).
+      Neither is implemented here, and neither should be added without an
+      operator explicitly choosing and understanding that trade-off at the
+      time they need it.
+    - A loud failure forces exactly that decision to be made consciously,
+      by a human, on the data in front of them — which is safer than this
+      migration silently guessing on their behalf.
+
+    Downgrading past this revision is therefore only unconditionally safe on
+    a database with no such rows (e.g. a fresh/disposable one, as the
+    PostgreSQL integration suite now uses — see
+    tests/persistence/postgres/conftest.py). On a real, in-use database,
+    handling those rows (export, delete, or otherwise) is a deliberate
+    operational decision that belongs outside this migration, not inside it.
+    """
     with op.batch_alter_table('failure_findings') as batch_op:
         batch_op.drop_constraint('fk_failure_findings_test_case_id_test_cases', type_='foreignkey')
         batch_op.drop_index(batch_op.f('ix_failure_findings_test_case_id'))

@@ -20,3 +20,4 @@ frontend/dist/
 # Editors
 .vscode/
 .idea/
+.e2e.db

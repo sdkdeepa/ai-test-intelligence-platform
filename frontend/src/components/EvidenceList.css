@@ -1,0 +1,21 @@
+.evidence-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.evidence-list li {
+  margin-bottom: 0.25rem;
+}
+
+.evidence-list li:last-child {
+  margin-bottom: 0;
+}
+
+.evidence-list__empty {
+  font-size: 0.85rem;
+  color: var(--text);
+  font-style: italic;
+  opacity: 0.75;
+}

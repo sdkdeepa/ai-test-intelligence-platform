@@ -26,6 +26,11 @@ class RepositoryOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+@router.get("", response_model=list[RepositoryOut])
+def list_repositories(session: Session = Depends(get_session)) -> list:
+    return RepositoryRepository(session).list()
+
+
 @router.post("", response_model=RepositoryOut, status_code=201)
 def create_repository(payload: RepositoryCreate, session: Session = Depends(get_session)) -> RepositoryModel:
     repos = RepositoryRepository(session)

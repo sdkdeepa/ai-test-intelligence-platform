@@ -230,8 +230,19 @@ backward.
   `useTestSuggestions`, etc.), giving pages caching/loading/error states for free
   without each page reimplementing fetch logic.
 
-Frontend scope is deliberately deferred past Sprint 0 — this section defines the shape
-it will take when built, not an implementation commitment yet.
+**Implementation status (Sprint 10):** built as designed above. Six pages — Repository
+Overview, Risk Analysis, Test Suggestions, Failure Intelligence, Analysis Run History,
+and Human Review (a cross-repo pending-suggestion queue, since there's no dedicated
+backend aggregation endpoint for it yet — built client-side over the per-repo endpoint,
+documented as a scaling note in `state/usePendingReview.ts`). Trigger-and-poll flows use
+`AnalysisRun.status` polling (`state/useAnalysisRuns.ts`'s `usePollAnalysisRunStatus`)
+rather than a websocket/SSE push, consistent with system-design.md §4's "clients poll for
+completion" API contract. Two small backend additions were needed to power views the API
+didn't yet expose: `GET /api/v1/repositories` (list) and
+`GET /api/v1/repositories/{id}/analysis-runs[/{run_id}/llm-invocations]` (run history +
+the provider/model/latency/token-usage detail `LLMInvocation` has captured since Sprint
+9) — both thin routes over repository methods that already existed. CORS is wide open
+(`allow_origins=["*"]`) since there's still no auth model to scope it against.
 
 ## 7. Provider Abstraction Strategy
 
