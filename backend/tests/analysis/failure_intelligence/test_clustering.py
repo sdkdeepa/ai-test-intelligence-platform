@@ -107,9 +107,7 @@ def test_record_flaky_pattern_updates_existing_finding_instead_of_duplicating(se
     session = session_factory()
     try:
         signal = compute_historical_signal(session, test_case_id)
-        first_id = record_flaky_pattern(
-            session, test_case_id=test_case_id, analysis_run_id=uuid.uuid4(), signal=signal
-        )
+        first_id = record_flaky_pattern(session, test_case_id=test_case_id, analysis_run_id=uuid.uuid4(), signal=signal)
         session.commit()
         first_seen = FlakyTestFindingRepository(session).get(first_id).first_detected_at
     finally:

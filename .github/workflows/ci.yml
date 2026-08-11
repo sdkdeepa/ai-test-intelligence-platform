@@ -1,0 +1,126 @@
+name: CI
+
+# Required check for merge (architecture.md §10). Runs lint/format/type/unit
+# checks for both halves of the monorepo on every push and PR — the fast
+# feedback loop. Postgres integration, e2e, and Docker builds are separate
+# workflows (integration.yml, e2e.yml, docker.yml) so a failure in one
+# doesn't block/confuse the others, and so this one stays fast.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same PR/branch rather than burning minutes
+# on a push that's already been overtaken by a newer one.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Ordinary CI never calls a real LLM provider (Sprint 11 requirement).
+  # MockProvider is the default already (providers/config.py), but this is
+  # set explicitly so a future config change can't silently start spending
+  # API budget on every PR.
+  PROVIDER_DEFAULT_PROVIDER: mock
+  LANGSMITH_ENABLED: "false"
+
+jobs:
+  backend:
+    name: Backend (lint, types, tests, coverage)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Ruff lint
+        run: ruff check app tests
+
+      - name: Ruff format check
+        run: ruff format --check app tests
+
+      - name: mypy
+        run: mypy
+
+      - name: PyTest (unit + API contract tests, MockProvider, coverage)
+        # -m "not live and not postgres" excludes the two opt-in suites: real
+        # Anthropic calls (see live-smoke.yml) and real-Postgres integration
+        # (see integration.yml). This includes tests/api/ — the request/
+        # response shape ("API contract") tests called out in
+        # docs/architecture.md §9 — since they need no real DB or provider.
+        run: |
+          pytest -m "not live and not postgres" \
+            --cov=app --cov-report=term-missing --cov-report=xml --cov-report=html \
+            --junitxml=junit.xml
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: |
+            backend/coverage.xml
+            backend/htmlcov/
+          retention-days: 14
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: backend/junit.xml
+          retention-days: 14
+
+  frontend:
+    name: Frontend (lint, tests, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (oxlint)
+        run: npm run lint
+
+      - name: Unit / component tests (Vitest)
+        run: npm run test -- --reporter=default --reporter=junit --outputFile=junit.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-test-results
+          path: frontend/junit.xml
+          retention-days: 14
+
+      - name: Production build
+        run: npm run build
+
+      - name: Upload production build
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 14

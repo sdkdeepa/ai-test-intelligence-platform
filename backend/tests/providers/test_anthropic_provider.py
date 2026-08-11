@@ -9,10 +9,10 @@ that call the real API.
 
 from types import SimpleNamespace
 
+import anthropic
 import httpx
 import pytest
 
-import anthropic
 from app.providers.anthropic import AnthropicProvider, AnthropicProviderError
 from app.providers.base import PromptSpec
 
@@ -60,9 +60,7 @@ def test_requires_non_empty_api_key():
 
 
 def test_name_returns_anthropic():
-    provider = AnthropicProvider(
-        api_key="test-key", model="claude-sonnet-5", client=_FakeClient(_fake_response())
-    )
+    provider = AnthropicProvider(api_key="test-key", model="claude-sonnet-5", client=_FakeClient(_fake_response()))
     assert provider.name() == "anthropic"
 
 
@@ -101,9 +99,7 @@ def test_generate_passes_system_kwarg_when_present():
 
 def test_generate_maps_rate_limit_error_as_retryable():
     error = _status_error(anthropic.RateLimitError, 429, "rate_limit_error")
-    provider = AnthropicProvider(
-        api_key="test-key", model="claude-sonnet-5", client=_FakeClient(error=error)
-    )
+    provider = AnthropicProvider(api_key="test-key", model="claude-sonnet-5", client=_FakeClient(error=error))
 
     with pytest.raises(AnthropicProviderError) as exc_info:
         provider.generate(PromptSpec(user="ping"))
@@ -116,9 +112,7 @@ def test_generate_maps_rate_limit_error_as_retryable():
 def test_generate_maps_connection_error_as_retryable():
     request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
     error = anthropic.APIConnectionError(request=request)
-    provider = AnthropicProvider(
-        api_key="test-key", model="claude-sonnet-5", client=_FakeClient(error=error)
-    )
+    provider = AnthropicProvider(api_key="test-key", model="claude-sonnet-5", client=_FakeClient(error=error))
 
     with pytest.raises(AnthropicProviderError) as exc_info:
         provider.generate(PromptSpec(user="ping"))
@@ -128,9 +122,7 @@ def test_generate_maps_connection_error_as_retryable():
 
 def test_generate_maps_server_error_as_retryable():
     error = _status_error(anthropic.InternalServerError, 500, "api_error")
-    provider = AnthropicProvider(
-        api_key="test-key", model="claude-sonnet-5", client=_FakeClient(error=error)
-    )
+    provider = AnthropicProvider(api_key="test-key", model="claude-sonnet-5", client=_FakeClient(error=error))
 
     with pytest.raises(AnthropicProviderError) as exc_info:
         provider.generate(PromptSpec(user="ping"))
@@ -141,9 +133,7 @@ def test_generate_maps_server_error_as_retryable():
 
 def test_generate_maps_client_error_as_non_retryable():
     error = _status_error(anthropic.BadRequestError, 400, "invalid_request_error")
-    provider = AnthropicProvider(
-        api_key="test-key", model="claude-sonnet-5", client=_FakeClient(error=error)
-    )
+    provider = AnthropicProvider(api_key="test-key", model="claude-sonnet-5", client=_FakeClient(error=error))
 
     with pytest.raises(AnthropicProviderError) as exc_info:
         provider.generate(PromptSpec(user="ping"))

@@ -41,10 +41,13 @@ def build_test_intelligence_prompt(
     inputs: TestIntelligenceInputs, applicability: list[TestTypeApplicability]
 ) -> PromptSpec:
     applicable = [a for a in applicability if a.applicable]
-    applicable_summary = "\n".join(
-        f"- {a.test_type} (deterministic confidence {a.confidence:.2f}): " + "; ".join(a.evidence)
-        for a in applicable
-    ) or "(none)"
+    applicable_summary = (
+        "\n".join(
+            f"- {a.test_type} (deterministic confidence {a.confidence:.2f}): " + "; ".join(a.evidence)
+            for a in applicable
+        )
+        or "(none)"
+    )
 
     sections = [f"Applicable test types:\n{applicable_summary}"]
     if inputs.source_code:

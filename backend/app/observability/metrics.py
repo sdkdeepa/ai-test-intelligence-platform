@@ -61,9 +61,7 @@ def record_llm_invocation(
     )
     LLM_LATENCY_SECONDS.labels(provider=provider, model=model, engine_type=engine_type).observe(latency_ms / 1000)
     if estimated_cost is not None:
-        LLM_ESTIMATED_COST_USD_TOTAL.labels(provider=provider, model=model, engine_type=engine_type).inc(
-            estimated_cost
-        )
+        LLM_ESTIMATED_COST_USD_TOTAL.labels(provider=provider, model=model, engine_type=engine_type).inc(estimated_cost)
 
 
 def record_analysis_run_terminal_state(*, engine_type: str, status: str) -> None:

@@ -39,9 +39,7 @@ def test_record_llm_invocation_increments_invocations_and_token_counters():
     before_input_tokens = _value(LLM_TOKENS_TOTAL, **labels, direction="input")
     before_output_tokens = _value(LLM_TOKENS_TOTAL, **labels, direction="output")
 
-    record_llm_invocation(
-        **labels, input_tokens=10, output_tokens=5, latency_ms=250.0, estimated_cost=0.02
-    )
+    record_llm_invocation(**labels, input_tokens=10, output_tokens=5, latency_ms=250.0, estimated_cost=0.02)
 
     assert _value(LLM_INVOCATIONS_TOTAL, **labels, status="success") == before_invocations + 1
     assert _value(LLM_TOKENS_TOTAL, **labels, direction="input") == before_input_tokens + 10
@@ -82,7 +80,9 @@ def test_record_llm_invocation_error_status_is_a_separate_series():
     before_success = _value(LLM_INVOCATIONS_TOTAL, **labels, status="success")
     before_error = _value(LLM_INVOCATIONS_TOTAL, **labels, status="error")
 
-    record_llm_invocation(**labels, input_tokens=0, output_tokens=0, latency_ms=0.0, estimated_cost=None, status="error")
+    record_llm_invocation(
+        **labels, input_tokens=0, output_tokens=0, latency_ms=0.0, estimated_cost=None, status="error"
+    )
 
     assert _value(LLM_INVOCATIONS_TOTAL, **labels, status="error") == before_error + 1
     assert _value(LLM_INVOCATIONS_TOTAL, **labels, status="success") == before_success

@@ -29,9 +29,7 @@ class EngineRegistry:
         try:
             return self._engines[engine_type]
         except KeyError:
-            raise EngineNotRegisteredError(
-                f"No engine registered for engine_type '{engine_type}'"
-            ) from None
+            raise EngineNotRegisteredError(f"No engine registered for engine_type '{engine_type}'") from None
 
     def registered_types(self) -> list[str]:
         return list(self._engines)

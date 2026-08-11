@@ -88,9 +88,7 @@ def test_trigger_analysis_for_unknown_repository_returns_404(client):
 def test_get_unknown_analysis_run_returns_404(client):
     repo_id = _create_repo(client)
 
-    response = client.get(
-        f"/api/v1/repositories/{repo_id}/analysis-runs/00000000-0000-0000-0000-000000000000"
-    )
+    response = client.get(f"/api/v1/repositories/{repo_id}/analysis-runs/00000000-0000-0000-0000-000000000000")
     assert response.status_code == 404
 
 

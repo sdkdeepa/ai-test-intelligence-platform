@@ -1,0 +1,90 @@
+name: Integration
+
+# Backend integration tests against a real PostgreSQL instance (architecture.md
+# §10: required for merge once backend code exists — it does). Separate from
+# ci.yml so the Postgres service container and its startup cost don't slow
+# down the fast unit-test feedback loop, and so a Postgres-specific failure
+# is unambiguous rather than buried in a mixed job.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: integration-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROVIDER_DEFAULT_PROVIDER: mock
+  LANGSMITH_ENABLED: "false"
+
+jobs:
+  postgres-integration:
+    name: PostgreSQL integration (migrations + repositories)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ai_test_intelligence
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Only needs to reach the Postgres *server* — the test suite itself
+      # creates and drops a uniquely-named, disposable database per run and
+      # never touches "ai_test_intelligence" directly. See
+      # tests/persistence/postgres/conftest.py's module docstring for why
+      # that separation exists (an earlier version of this suite ran
+      # directly against the shared dev database).
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/ai_test_intelligence
+      RUN_POSTGRES_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -p 5432 -U postgres && exit 0
+            sleep 1
+          done
+          echo "PostgreSQL did not become ready in time" >&2
+          exit 1
+
+      # Migrations, FK constraint enforcement, and the full round-trip
+      # (upgrade to head, downgrade one revision, upgrade back) are all
+      # exercised by this suite — see tests/persistence/postgres/
+      # test_postgres_integration.py's module docstring for why plain
+      # SQLite unit tests can't stand in for this coverage.
+      - name: Run migrations + PostgreSQL integration tests
+        run: |
+          pytest tests/persistence/postgres -v -m postgres \
+            --junitxml=postgres-integration-junit.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-integration-results
+          path: backend/postgres-integration-junit.xml
+          retention-days: 14

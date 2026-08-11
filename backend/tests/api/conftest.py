@@ -33,9 +33,7 @@ def client(tmp_path):
     registry = EngineRegistry()
     registry.register(RiskEngine(provider_registry=ProviderRegistry(), session_factory=session_factory))
     registry.register(TestIntelligenceEngine(provider_registry=ProviderRegistry(), session_factory=session_factory))
-    registry.register(
-        FailureIntelligenceEngine(provider_registry=ProviderRegistry(), session_factory=session_factory)
-    )
+    registry.register(FailureIntelligenceEngine(provider_registry=ProviderRegistry(), session_factory=session_factory))
     orchestrator = AnalysisOrchestrator(
         registry=registry,
         task_queue=InProcessTaskQueue(),

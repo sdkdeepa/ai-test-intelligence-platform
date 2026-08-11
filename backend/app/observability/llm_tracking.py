@@ -14,7 +14,7 @@ success or content depends on LangSmith.
 
 import uuid
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -143,7 +143,7 @@ def _start_langsmith_run(
             run_type="llm",
             inputs={"system": prompt.system, "user": prompt.user},
             project_name=get_langsmith_settings().project,
-            start_time=datetime.now(timezone.utc),
+            start_time=datetime.now(UTC),
             extra={
                 "metadata": {
                     "engine_type": engine_type,
@@ -171,7 +171,7 @@ def _end_langsmith_run(
         return
 
     try:
-        kwargs: dict = {"end_time": datetime.now(timezone.utc)}
+        kwargs: dict = {"end_time": datetime.now(UTC)}
         if error is not None:
             kwargs["error"] = error
         if response is not None:

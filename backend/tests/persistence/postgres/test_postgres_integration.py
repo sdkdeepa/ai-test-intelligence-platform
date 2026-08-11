@@ -42,8 +42,10 @@ from app.persistence.database import build_engine
 from app.persistence.models import (
     AnalysisRun,
     LLMInvocation,
-    Repository as RepositoryModel,
     RiskFinding,
+)
+from app.persistence.models import (
+    Repository as RepositoryModel,
 )
 from app.persistence.repositories import (
     AnalysisRunRepository,
@@ -63,9 +65,19 @@ pytestmark = [
 BACKEND_DIR = Path(__file__).resolve().parents[3]
 
 EXPECTED_TABLES = {
-    "repositories", "commits", "test_cases", "test_runs", "test_results",
-    "llm_provider_configs", "analysis_runs", "risk_findings", "test_suggestions",
-    "flaky_test_findings", "failure_findings", "llm_invocations", "alembic_version",
+    "repositories",
+    "commits",
+    "test_cases",
+    "test_runs",
+    "test_results",
+    "llm_provider_configs",
+    "analysis_runs",
+    "risk_findings",
+    "test_suggestions",
+    "flaky_test_findings",
+    "failure_findings",
+    "llm_invocations",
+    "alembic_version",
 }
 
 
@@ -163,9 +175,7 @@ def test_relationship_traversal_round_trips_through_postgres(session):
     repo = RepositoryRepository(session).add(
         RepositoryModel(name="x", url=f"https://x/{uuid.uuid4()}", default_branch="main")
     )
-    run = AnalysisRunRepository(session).add(
-        AnalysisRun(repo_id=repo.id, trigger="pr", type="risk", status="pending")
-    )
+    run = AnalysisRunRepository(session).add(AnalysisRun(repo_id=repo.id, trigger="pr", type="risk", status="pending"))
     RiskFindingRepository(session).add(
         RiskFinding(analysis_run_id=run.id, repo_id=repo.id, file_path="a.py", risk_score=0.5)
     )
@@ -189,9 +199,7 @@ def test_llm_invocation_persists_and_round_trips_audit_fields(session):
     repo = RepositoryRepository(session).add(
         RepositoryModel(name="x", url=f"https://x/{uuid.uuid4()}", default_branch="main")
     )
-    run = AnalysisRunRepository(session).add(
-        AnalysisRun(repo_id=repo.id, trigger="pr", type="risk", status="pending")
-    )
+    run = AnalysisRunRepository(session).add(AnalysisRun(repo_id=repo.id, trigger="pr", type="risk", status="pending"))
     invocations = LLMInvocationRepository(session)
     invocations.add(
         LLMInvocation(

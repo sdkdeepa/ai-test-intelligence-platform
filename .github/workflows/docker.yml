@@ -1,0 +1,58 @@
+name: Docker
+
+# Validates the container artifacts described in docs/architecture.md §10
+# ("Docker image build/publish: deferred to the sprint that introduces
+# deployable artifacts") without actually publishing anything — this is a
+# build-only correctness gate (Dockerfiles still build, docker-compose.yml
+# is still valid), not a release pipeline. Kept separate from ci.yml since
+# image builds are slow and rarely the thing that breaks day-to-day.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: docker-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-images:
+    name: Build backend + frontend images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: false
+          tags: ai-test-intelligence-backend:ci
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: false
+          tags: ai-test-intelligence-frontend:ci
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+  compose-validate:
+    name: docker-compose config + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate docker-compose.yml
+        run: docker compose config --quiet
+
+      - name: Build all compose services
+        # --quiet-pull avoids re-logging the postgres:16-alpine base image
+        # pull; build (not up) is enough to confirm every service's image
+        # actually builds together under the compose file's env var wiring.
+        run: docker compose build --quiet

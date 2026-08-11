@@ -76,7 +76,12 @@ class AnthropicProvider(LLMProvider):
             kwargs["system"] = prompt.system
 
         try:
-            response = self._client.messages.create(**kwargs)
+            # kwargs is built up conditionally (system prompt is optional), so its
+            # static type is a plain dict rather than the SDK's precise keyword
+            # signature; the overloads themselves (streaming vs. non-streaming,
+            # by literal `stream=`) are what mypy can't resolve from an unpacked
+            # dict, not the actual call shape at runtime.
+            response = self._client.messages.create(**kwargs)  # type: ignore[call-overload]
         except anthropic.RateLimitError as exc:
             raise AnthropicProviderError(
                 str(exc), status_code=exc.status_code, error_type=exc.type, retryable=True
@@ -93,9 +98,7 @@ class AnthropicProvider(LLMProvider):
 
         latency_ms = (time.perf_counter() - start) * 1000
 
-        output_text = "".join(
-            block.text for block in response.content if block.type == "text"
-        )
+        output_text = "".join(block.text for block in response.content if block.type == "text")
 
         return LLMResponse(
             output={"text": output_text},

@@ -116,9 +116,7 @@ def test_llm_hypotheses_are_kept_separate_from_deterministic_evidence(session_fa
     assert result.output["classification"] == "regression"
     assert any("server error" in e.lower() for e in result.output["evidence"])
     # Hypotheses: sourced only from the LLM, clearly a distinct field.
-    assert result.output["root_cause_hypotheses"] == [
-        "a dependency version bump may have changed the response shape"
-    ]
+    assert result.output["root_cause_hypotheses"] == ["a dependency version bump may have changed the response shape"]
     assert result.output["suggested_bug_report"] == "list_risk_findings raises KeyError on confidence_score"
     # Confidence nudged, deterministic evidence list untouched by the nudge.
     assert result.output["confidence"] > 0.55

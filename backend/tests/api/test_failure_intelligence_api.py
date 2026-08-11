@@ -5,9 +5,10 @@ persistence -> API response.
 
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-from app.persistence.models import Commit, Repository as RepositoryModel, TestCase, TestResult, TestRun
+from app.persistence.models import Commit, TestCase, TestResult, TestRun
+from app.persistence.models import Repository as RepositoryModel
 from tests.fixtures.failure_intelligence.loader import load_failure_intelligence_fixture
 
 
@@ -84,13 +85,15 @@ def test_flaky_classification_via_historical_clustering(client):
         session.add(test_case)
         session.flush()
 
-        base_time = datetime.now(timezone.utc) - timedelta(days=4)
+        base_time = datetime.now(UTC) - timedelta(days=4)
         for i, status in enumerate(["passed", "failed", "passed", "failed"]):
             commit = Commit(repo_id=repo.id, sha=f"sha{i}")
             session.add(commit)
             session.flush()
             test_run = TestRun(
-                commit_id=commit.id, ci_provider="github-actions", status="completed",
+                commit_id=commit.id,
+                ci_provider="github-actions",
+                status="completed",
                 started_at=base_time + timedelta(hours=i),
             )
             session.add(test_run)

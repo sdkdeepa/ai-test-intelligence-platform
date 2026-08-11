@@ -32,9 +32,7 @@ def test_resolves_default_provider_for_any_engine():
 
 
 def test_per_engine_override_takes_precedence_over_default():
-    registry = ProviderRegistry(
-        ProviderSettings(default_provider="mock", failure_intelligence_provider="stub")
-    )
+    registry = ProviderRegistry(ProviderSettings(default_provider="mock", failure_intelligence_provider="stub"))
     registry.register(_StubProvider())
 
     assert registry.get("failure_intelligence").name() == "stub"
@@ -65,8 +63,6 @@ def test_anthropic_not_registered_without_api_key():
 
 
 def test_anthropic_registered_when_api_key_configured():
-    registry = ProviderRegistry(
-        ProviderSettings(default_provider="anthropic", anthropic_api_key="sk-test-not-real")
-    )
+    registry = ProviderRegistry(ProviderSettings(default_provider="anthropic", anthropic_api_key="sk-test-not-real"))
 
     assert registry.get("risk").name() == "anthropic"

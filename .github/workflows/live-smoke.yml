@@ -1,0 +1,57 @@
+name: Live Provider Smoke Test
+
+# Manually triggered only (architecture.md §10: "Live provider smoke test
+# workflow: manually triggered only (workflow_dispatch), runs the provider
+# contract tests against real Anthropic/OpenAI APIs. Never runs
+# automatically, to keep normal CI free of external API cost and
+# flakiness."). This is the ONLY workflow in the repo permitted to spend
+# real Anthropic API budget — ci.yml, integration.yml, and e2e.yml all pin
+# PROVIDER_DEFAULT_PROVIDER=mock and never set an API key.
+#
+# Exercises tests/providers/test_anthropic_live.py, the existing opt-in
+# suite gated behind RUN_LIVE_ANTHROPIC_TESTS=1 and pytest's `live` marker
+# (pyproject.toml).
+on:
+  workflow_dispatch: {}
+
+jobs:
+  anthropic-live-smoke:
+    name: Anthropic live smoke test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      RUN_LIVE_ANTHROPIC_TESTS: "1"
+      PROVIDER_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Fail fast if ANTHROPIC_API_KEY secret is not configured
+        run: |
+          if [ -z "$PROVIDER_ANTHROPIC_API_KEY" ]; then
+            echo "::error::Repository secret ANTHROPIC_API_KEY is not set — cannot run a live smoke test." >&2
+            exit 1
+          fi
+
+      - name: Run live Anthropic provider tests
+        run: pytest tests/providers/test_anthropic_live.py -v -m live --junitxml=live-smoke-junit.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-smoke-results
+          path: backend/live-smoke-junit.xml
+          retention-days: 14

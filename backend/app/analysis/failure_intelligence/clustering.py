@@ -10,7 +10,7 @@ needs no more than that to call "intermittent."
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
 from sqlalchemy.orm import Session
@@ -77,7 +77,7 @@ def record_flaky_pattern(
     """
     repo = FlakyTestFindingRepository(session)
     existing = repo.list_by_test_case(test_case_id)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     confidence = min(0.9, 0.5 + 0.1 * signal.failed_count)
 
     if existing:

@@ -61,9 +61,7 @@ def test_parse_llm_output_accepts_well_formed_json_for_applicable_types():
 
 
 def test_parse_llm_output_drops_suggestions_outside_applicable_types():
-    output = {
-        "text": '{"suggestions": [{"test_type": "security", "proposed_test": "x", "rationale": "y"}]}'
-    }
+    output = {"text": '{"suggestions": [{"test_type": "security", "proposed_test": "x", "rationale": "y"}]}'}
 
     result = parse_llm_output(output, applicable_types={"unit"})
 

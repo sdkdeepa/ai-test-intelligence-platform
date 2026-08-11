@@ -1,11 +1,12 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.orm import sessionmaker
 
 from app.persistence.database import Base, build_engine
-from app.persistence.models import Commit, Repository as RepositoryModel, TestCase, TestResult, TestRun
+from app.persistence.models import Commit, TestCase, TestResult, TestRun
+from app.persistence.models import Repository as RepositoryModel
 
 
 @pytest.fixture
@@ -37,7 +38,7 @@ def seed_test_case_with_history(session_factory, statuses: list[str]) -> uuid.UU
         session.add(test_case)
         session.flush()
 
-        base_time = datetime.now(timezone.utc) - timedelta(days=len(statuses))
+        base_time = datetime.now(UTC) - timedelta(days=len(statuses))
         for i, status in enumerate(statuses):
             commit = Commit(repo_id=repo.id, sha=f"sha{i}")
             session.add(commit)
