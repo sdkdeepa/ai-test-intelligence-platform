@@ -11,6 +11,7 @@ from app.api.repositories import router as repositories_router
 from app.api.risk import router as risk_router
 from app.api.test_intelligence import repo_router as test_intelligence_repo_router
 from app.api.test_intelligence import suggestion_router as test_suggestion_router
+from app.api.webhooks import router as webhooks_router
 from app.config import get_settings
 from app.observability.eval_datasets import sync_all_evaluation_datasets
 from app.observability.langsmith_client import get_langsmith_client
@@ -66,6 +67,7 @@ def create_app() -> FastAPI:
     app.include_router(test_suggestion_router)
     app.include_router(failure_intelligence_router)
     app.include_router(analysis_runs_router)
+    app.include_router(webhooks_router)
     return app
 
 

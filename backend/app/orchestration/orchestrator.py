@@ -57,10 +57,24 @@ class AnalysisOrchestrator:
         correlation_id: str | None = None,
         trace_id: str | None = None,
         timeout: float | None = None,
+        on_result: Callable[[uuid.UUID, AnalysisResult], None] | None = None,
     ) -> uuid.UUID:
         """Look up the engine, persist a pending AnalysisRun, and enqueue the
         job. Returns the analysis_run_id immediately — the engine itself
         runs asynchronously on the TaskQueue.
+
+        `on_result`, if given, is invoked exactly once with
+        `(analysis_run_id, AnalysisResult)` when the run reaches a terminal
+        state — after `_on_transition` has already persisted
+        `AnalysisRun.status`. Always receives a real `AnalysisResult` (one is
+        synthesized for the "crashed/timed out with no result" path — see
+        below), so callers never have to special-case `None`. This is a
+        generic completion hook, not analysis logic: the orchestrator
+        doesn't know or care what a caller does with the result (Sprint 12's
+        GitHub webhook handler uses it to publish a commit status + PR
+        comment; nothing here is GitHub-specific). Runs on the TaskQueue's
+        worker thread, same as `_on_transition` — callers must not assume
+        the calling thread.
         """
         engine: AnalysisEngine = self._registry.get(engine_type)  # raises before anything is persisted
 
@@ -90,13 +104,37 @@ class AnalysisOrchestrator:
             log.info("analysis_engine_finished", status=result.status)
             return result
 
+        def on_transition(job_id: str, state: JobState) -> None:
+            self._on_transition(job_id, state)
+            if on_result is not None and state in _TERMINAL_STATES:
+                job_status = self._task_queue.status(job_id)
+                # A job can reach a terminal "failed" state two ways: the
+                # engine returned AnalysisResult(status="failed", ...), or
+                # an uncaught exception/timeout never produced a result at
+                # all (queue.py's _supervise never sets `.result` on that
+                # path). on_result's contract is "always exactly one
+                # AnalysisResult on terminal state" regardless of which
+                # happened — synthesize one here rather than making every
+                # caller special-case a possible `None`.
+                result = job_status.result or AnalysisResult(
+                    status="failed", error=job_status.error or "job did not produce a result"
+                )
+                try:
+                    on_result(analysis_run_id, result)
+                except Exception:  # noqa: BLE001 — a caller's completion hook must never take down the worker thread
+                    logger.warning(
+                        "analysis_run_on_result_failed",
+                        analysis_run_id=str(analysis_run_id),
+                        exc_info=True,
+                    )
+
         self._task_queue.enqueue(
             job,
             analysis_run_id=analysis_run_id,
             correlation_id=correlation_id,
             trace_id=trace_id,
             timeout=timeout if timeout is not None else self._default_timeout,
-            on_transition=self._on_transition,
+            on_transition=on_transition,
         )
         return analysis_run_id
 
