@@ -130,7 +130,12 @@ def test_successful_engine_run_transitions_to_completed(session_factory):
 
     analysis_run_id = orchestrator.submit(repo_id=repo_id, engine_type="risk", trigger="pr")
 
-    final_status = wait_until(lambda: orchestrator.run_status(analysis_run_id) in ("completed", "failed") and orchestrator.run_status(analysis_run_id))
+    final_status = wait_until(
+        lambda: (
+            orchestrator.run_status(analysis_run_id) in ("completed", "failed")
+            and orchestrator.run_status(analysis_run_id)
+        )
+    )
 
     assert final_status == "completed"
 
@@ -143,7 +148,12 @@ def test_raising_engine_transitions_run_to_failed(session_factory):
 
     analysis_run_id = orchestrator.submit(repo_id=repo_id, engine_type="risk", trigger="pr")
 
-    final_status = wait_until(lambda: orchestrator.run_status(analysis_run_id) in ("completed", "failed") and orchestrator.run_status(analysis_run_id))
+    final_status = wait_until(
+        lambda: (
+            orchestrator.run_status(analysis_run_id) in ("completed", "failed")
+            and orchestrator.run_status(analysis_run_id)
+        )
+    )
 
     assert final_status == "failed"
 
@@ -157,7 +167,10 @@ def test_engine_exceeding_timeout_transitions_run_to_failed(session_factory):
     analysis_run_id = orchestrator.submit(repo_id=repo_id, engine_type="risk", trigger="pr")
 
     final_status = wait_until(
-        lambda: orchestrator.run_status(analysis_run_id) in ("completed", "failed") and orchestrator.run_status(analysis_run_id),
+        lambda: (
+            orchestrator.run_status(analysis_run_id) in ("completed", "failed")
+            and orchestrator.run_status(analysis_run_id)
+        ),
         timeout=1.0,
     )
 
@@ -170,7 +183,7 @@ def test_submit_with_unregistered_engine_type_raises_and_persists_nothing(sessio
 
     try:
         orchestrator.submit(repo_id=repo_id, engine_type="risk", trigger="pr")
-        assert False, "expected EngineNotRegisteredError"
+        raise AssertionError("expected EngineNotRegisteredError")
     except EngineNotRegisteredError:
         pass
 

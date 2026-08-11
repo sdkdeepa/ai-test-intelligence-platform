@@ -12,6 +12,7 @@ from app.orchestration.bootstrap import get_orchestrator
 from app.orchestration.orchestrator import AnalysisOrchestrator
 from app.orchestration.registry import EngineNotRegisteredError
 from app.persistence.database import get_session
+from app.persistence.models import TestSuggestion
 from app.persistence.repositories import RepositoryRepository, TestSuggestionRepository
 
 repo_router = APIRouter(prefix="/api/v1/repositories", tags=["test-intelligence"])
@@ -91,7 +92,7 @@ def list_test_suggestions(repo_id: uuid.UUID, session: Session = Depends(get_ses
     return TestSuggestionRepository(session).list_by_repo(repo_id)
 
 
-def _set_status(suggestion_id: uuid.UUID, status: str, session: Session) -> TestSuggestionOut:
+def _set_status(suggestion_id: uuid.UUID, status: str, session: Session) -> TestSuggestion:
     repo = TestSuggestionRepository(session)
     suggestion = repo.get(suggestion_id)
     if suggestion is None:
@@ -103,10 +104,10 @@ def _set_status(suggestion_id: uuid.UUID, status: str, session: Session) -> Test
 
 
 @suggestion_router.post("/{suggestion_id}/accept", response_model=TestSuggestionOut)
-def accept_test_suggestion(suggestion_id: uuid.UUID, session: Session = Depends(get_session)) -> TestSuggestionOut:
+def accept_test_suggestion(suggestion_id: uuid.UUID, session: Session = Depends(get_session)) -> TestSuggestion:
     return _set_status(suggestion_id, "accepted", session)
 
 
 @suggestion_router.post("/{suggestion_id}/reject", response_model=TestSuggestionOut)
-def reject_test_suggestion(suggestion_id: uuid.UUID, session: Session = Depends(get_session)) -> TestSuggestionOut:
+def reject_test_suggestion(suggestion_id: uuid.UUID, session: Session = Depends(get_session)) -> TestSuggestion:
     return _set_status(suggestion_id, "rejected", session)

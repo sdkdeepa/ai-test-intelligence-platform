@@ -19,12 +19,14 @@ from app.persistence.models import (
     FlakyTestFinding,
     LLMInvocation,
     LLMProviderConfig,
-    Repository as RepositoryModel,
     RiskFinding,
     TestCase,
     TestResult,
     TestRun,
     TestSuggestion,
+)
+from app.persistence.models import (
+    Repository as RepositoryModel,
 )
 
 ModelT = TypeVar("ModelT")
@@ -72,9 +74,7 @@ class CommitRepository(BaseRepository[Commit]):
         return list(self.session.scalars(select(Commit).where(Commit.repo_id == repo_id)))
 
     def get_by_sha(self, repo_id: uuid.UUID, sha: str) -> Commit | None:
-        return self.session.scalar(
-            select(Commit).where(Commit.repo_id == repo_id, Commit.sha == sha)
-        )
+        return self.session.scalar(select(Commit).where(Commit.repo_id == repo_id, Commit.sha == sha))
 
 
 class TestCaseRepository(BaseRepository[TestCase]):
@@ -95,14 +95,10 @@ class TestResultRepository(BaseRepository[TestResult]):
     model = TestResult
 
     def list_by_test_case(self, test_case_id: uuid.UUID) -> list[TestResult]:
-        return list(
-            self.session.scalars(select(TestResult).where(TestResult.test_case_id == test_case_id))
-        )
+        return list(self.session.scalars(select(TestResult).where(TestResult.test_case_id == test_case_id)))
 
     def list_by_test_run(self, test_run_id: uuid.UUID) -> list[TestResult]:
-        return list(
-            self.session.scalars(select(TestResult).where(TestResult.test_run_id == test_run_id))
-        )
+        return list(self.session.scalars(select(TestResult).where(TestResult.test_run_id == test_run_id)))
 
     def list_by_test_case_chronological(self, test_case_id: uuid.UUID) -> list[TestResult]:
         """Oldest-first, ordered by the owning TestRun's started_at.
@@ -148,27 +144,19 @@ class RiskFindingRepository(BaseRepository[RiskFinding]):
         return list(self.session.scalars(select(RiskFinding).where(RiskFinding.repo_id == repo_id)))
 
     def list_by_run(self, analysis_run_id: uuid.UUID) -> list[RiskFinding]:
-        return list(
-            self.session.scalars(
-                select(RiskFinding).where(RiskFinding.analysis_run_id == analysis_run_id)
-            )
-        )
+        return list(self.session.scalars(select(RiskFinding).where(RiskFinding.analysis_run_id == analysis_run_id)))
 
 
 class TestSuggestionRepository(BaseRepository[TestSuggestion]):
     model = TestSuggestion
 
     def list_by_repo(self, repo_id: uuid.UUID) -> list[TestSuggestion]:
-        return list(
-            self.session.scalars(select(TestSuggestion).where(TestSuggestion.repo_id == repo_id))
-        )
+        return list(self.session.scalars(select(TestSuggestion).where(TestSuggestion.repo_id == repo_id)))
 
     def list_by_status(self, repo_id: uuid.UUID, status: str) -> list[TestSuggestion]:
         return list(
             self.session.scalars(
-                select(TestSuggestion).where(
-                    TestSuggestion.repo_id == repo_id, TestSuggestion.status == status
-                )
+                select(TestSuggestion).where(TestSuggestion.repo_id == repo_id, TestSuggestion.status == status)
             )
         )
 
@@ -177,22 +165,14 @@ class FlakyTestFindingRepository(BaseRepository[FlakyTestFinding]):
     model = FlakyTestFinding
 
     def list_by_test_case(self, test_case_id: uuid.UUID) -> list[FlakyTestFinding]:
-        return list(
-            self.session.scalars(
-                select(FlakyTestFinding).where(FlakyTestFinding.test_case_id == test_case_id)
-            )
-        )
+        return list(self.session.scalars(select(FlakyTestFinding).where(FlakyTestFinding.test_case_id == test_case_id)))
 
 
 class FailureFindingRepository(BaseRepository[FailureFinding]):
     model = FailureFinding
 
     def list_by_test_result(self, test_result_id: uuid.UUID) -> list[FailureFinding]:
-        return list(
-            self.session.scalars(
-                select(FailureFinding).where(FailureFinding.test_result_id == test_result_id)
-            )
-        )
+        return list(self.session.scalars(select(FailureFinding).where(FailureFinding.test_result_id == test_result_id)))
 
     def list_by_classification(self, analysis_run_id: uuid.UUID, classification: str) -> list[FailureFinding]:
         return list(
@@ -221,8 +201,4 @@ class LLMInvocationRepository(BaseRepository[LLMInvocation]):
     model = LLMInvocation
 
     def list_by_run(self, analysis_run_id: uuid.UUID) -> list[LLMInvocation]:
-        return list(
-            self.session.scalars(
-                select(LLMInvocation).where(LLMInvocation.analysis_run_id == analysis_run_id)
-            )
-        )
+        return list(self.session.scalars(select(LLMInvocation).where(LLMInvocation.analysis_run_id == analysis_run_id)))

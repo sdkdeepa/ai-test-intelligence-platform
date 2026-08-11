@@ -13,7 +13,7 @@ import threading
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel
@@ -28,7 +28,7 @@ TransitionCallback = Callable[[str, JobState], None]
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class JobStatus(BaseModel):

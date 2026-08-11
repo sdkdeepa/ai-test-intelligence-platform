@@ -1,4 +1,4 @@
-.PHONY: install backend frontend test test-frontend e2e build docker-up docker-down clean
+.PHONY: install backend frontend test test-cov lint test-frontend e2e build docker-up docker-down clean
 
 install:
 	cd backend && python3 -m venv .venv && .venv/bin/pip install --upgrade pip && .venv/bin/pip install -e ".[dev]"
@@ -12,6 +12,12 @@ frontend:
 
 test:
 	cd backend && .venv/bin/pytest
+
+test-cov:
+	cd backend && .venv/bin/pytest --cov=app --cov-report=term-missing --cov-report=html --cov-report=xml
+
+lint:
+	cd backend && .venv/bin/ruff check app tests && .venv/bin/ruff format --check app tests && .venv/bin/mypy
 
 test-frontend:
 	cd frontend && npm run test
@@ -29,4 +35,5 @@ docker-down:
 	docker compose down
 
 clean:
-	rm -rf backend/.venv backend/.pytest_cache frontend/node_modules frontend/dist
+	rm -rf backend/.venv backend/.pytest_cache backend/.coverage backend/coverage.xml backend/htmlcov \
+		frontend/node_modules frontend/dist frontend/playwright-report frontend/test-results

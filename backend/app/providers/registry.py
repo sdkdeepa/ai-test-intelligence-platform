@@ -40,8 +40,7 @@ class ProviderRegistry:
             return self._providers[provider_name]
         except KeyError:
             raise ValueError(
-                f"No provider registered under '{provider_name}' "
-                f"(requested for engine '{engine_type}')"
+                f"No provider registered under '{provider_name}' (requested for engine '{engine_type}')"
             ) from None
 
     def _resolve_provider_name(self, engine_type: EngineType) -> str:

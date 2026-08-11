@@ -42,8 +42,7 @@ def build_failure_intelligence_prompt(
     evidence_summary = "\n".join(f"- {e.detail}" for e in evidence) or "(no factual evidence matched)"
 
     sections = [
-        f"Deterministic classification: {classification.classification} "
-        f"(confidence {classification.confidence:.2f})",
+        f"Deterministic classification: {classification.classification} (confidence {classification.confidence:.2f})",
         f"Factual evidence:\n{evidence_summary}",
     ]
     if inputs.test_name:

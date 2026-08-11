@@ -3,12 +3,14 @@ from app.persistence.models import (
     Commit,
     FailureFinding,
     LLMInvocation,
-    Repository as RepositoryModel,
     RiskFinding,
     TestCase,
     TestResult,
     TestRun,
     TestSuggestion,
+)
+from app.persistence.models import (
+    Repository as RepositoryModel,
 )
 from app.persistence.repositories import (
     AnalysisRunRepository,
@@ -68,16 +70,16 @@ def test_risk_finding_list_by_run(session):
     repo = RepositoryRepository(session).add(RepositoryModel(name="x", url="https://x", default_branch="main"))
     run = AnalysisRunRepository(session).add(AnalysisRun(repo_id=repo.id, trigger="pr", type="risk", status="pending"))
     findings = RiskFindingRepository(session)
-    finding = findings.add(
-        RiskFinding(analysis_run_id=run.id, repo_id=repo.id, file_path="a.py", risk_score=0.5)
-    )
+    finding = findings.add(RiskFinding(analysis_run_id=run.id, repo_id=repo.id, file_path="a.py", risk_score=0.5))
 
     assert [f.id for f in findings.list_by_run(run.id)] == [finding.id]
 
 
 def test_test_suggestion_list_by_status(session):
     repo = RepositoryRepository(session).add(RepositoryModel(name="x", url="https://x", default_branch="main"))
-    run = AnalysisRunRepository(session).add(AnalysisRun(repo_id=repo.id, trigger="pr", type="test_intelligence", status="pending"))
+    run = AnalysisRunRepository(session).add(
+        AnalysisRun(repo_id=repo.id, trigger="pr", type="test_intelligence", status="pending")
+    )
     suggestions = TestSuggestionRepository(session)
     pending = suggestions.add(
         TestSuggestion(
@@ -116,7 +118,9 @@ def test_failure_finding_list_by_classification(session):
     session.add(result)
     session.flush()
 
-    run = AnalysisRunRepository(session).add(AnalysisRun(repo_id=repo.id, trigger="ci", type="failure_intelligence", status="pending"))
+    run = AnalysisRunRepository(session).add(
+        AnalysisRun(repo_id=repo.id, trigger="ci", type="failure_intelligence", status="pending")
+    )
     findings = FailureFindingRepository(session)
     regression = findings.add(
         FailureFinding(test_result_id=result.id, analysis_run_id=run.id, classification="regression")
@@ -132,7 +136,9 @@ def test_failure_finding_list_by_classification(session):
 def test_llm_invocation_list_by_run(session):
     repo = RepositoryRepository(session).add(RepositoryModel(name="x", url="https://x", default_branch="main"))
     run = AnalysisRunRepository(session).add(AnalysisRun(repo_id=repo.id, trigger="pr", type="risk", status="pending"))
-    other_run = AnalysisRunRepository(session).add(AnalysisRun(repo_id=repo.id, trigger="pr", type="risk", status="pending"))
+    other_run = AnalysisRunRepository(session).add(
+        AnalysisRun(repo_id=repo.id, trigger="pr", type="risk", status="pending")
+    )
     invocations = LLMInvocationRepository(session)
     matching = invocations.add(
         LLMInvocation(

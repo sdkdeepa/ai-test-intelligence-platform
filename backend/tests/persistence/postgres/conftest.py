@@ -50,7 +50,9 @@ def _server_url() -> str:
     """
     url = os.environ.get("DATABASE_URL")
     if not url:
-        pytest.skip("DATABASE_URL must point at a reachable Postgres server (see docker-compose.yml's postgres service)")
+        pytest.skip(
+            "DATABASE_URL must point at a reachable Postgres server (see docker-compose.yml's postgres service)"
+        )
     return url
 
 

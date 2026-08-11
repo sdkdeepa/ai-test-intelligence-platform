@@ -1,6 +1,6 @@
 from app.analysis.risk.engine import RiskEngine
-from app.observability.experiments import run_evaluation_experiment
 from app.observability.eval_datasets import RISK_ANALYSIS_EXAMPLES
+from app.observability.experiments import run_evaluation_experiment
 from app.providers.registry import ProviderRegistry
 
 

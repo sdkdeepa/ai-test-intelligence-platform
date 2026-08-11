@@ -159,7 +159,9 @@ def detect_signals(diff: GitDiff) -> list[Signal]:
             if not matched and rule.content_pattern and content:
                 matched = bool(rule.content_pattern.search(content))
             if matched:
-                signals.append(Signal(category=rule.category, file_path=file.path, weight=rule.weight, detail=rule.description))
+                signals.append(
+                    Signal(category=rule.category, file_path=file.path, weight=rule.weight, detail=rule.description)
+                )
     return signals
 
 

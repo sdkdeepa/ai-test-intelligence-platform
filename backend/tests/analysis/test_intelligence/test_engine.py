@@ -1,8 +1,7 @@
 import uuid
 
 from app.analysis.test_intelligence.engine import TestIntelligenceEngine
-from app.analysis.test_intelligence.heuristics import TEST_TYPES, compute_applicability
-from app.analysis.test_intelligence.inputs import TestIntelligenceInputs
+from app.analysis.test_intelligence.heuristics import TEST_TYPES
 from app.orchestration.engine import AnalysisContext
 from app.persistence.repositories import TestSuggestionRepository
 from app.providers.base import LLMProvider, LLMResponse, PromptSpec
@@ -103,8 +102,12 @@ def test_every_applicable_type_gets_a_suggestion_even_when_llm_response_is_unpar
 
         def generate(self, prompt: PromptSpec) -> LLMResponse:
             return LLMResponse(
-                output={"text": "not json at all"}, provider="echo", model="echo-1",
-                input_tokens=1, output_tokens=1, latency_ms=0.1,
+                output={"text": "not json at all"},
+                provider="echo",
+                model="echo-1",
+                input_tokens=1,
+                output_tokens=1,
+                latency_ms=0.1,
             )
 
     registry = ProviderRegistry(ProviderSettings(test_intelligence_provider="echo"))

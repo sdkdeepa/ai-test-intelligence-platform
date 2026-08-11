@@ -2,6 +2,7 @@ import logging
 import sys
 
 import structlog
+from structlog.typing import Processor
 
 
 def configure_logging(log_level: str = "INFO", environment: str = "development") -> None:
@@ -10,16 +11,12 @@ def configure_logging(log_level: str = "INFO", environment: str = "development")
     level = getattr(logging, log_level.upper(), logging.INFO)
     logging.basicConfig(format="%(message)s", stream=sys.stdout, level=level)
 
-    shared_processors = [
+    shared_processors: list[Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
     ]
-    renderer = (
-        structlog.dev.ConsoleRenderer()
-        if environment == "development"
-        else structlog.processors.JSONRenderer()
-    )
+    renderer = structlog.dev.ConsoleRenderer() if environment == "development" else structlog.processors.JSONRenderer()
 
     structlog.configure(
         processors=[*shared_processors, renderer],

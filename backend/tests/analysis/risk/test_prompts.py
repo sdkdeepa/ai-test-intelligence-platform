@@ -49,7 +49,9 @@ def test_parse_llm_output_clamps_confidence_adjustment_out_of_bounds():
 
 
 def test_parse_llm_output_drops_unknown_categories():
-    output = {"text": '{"narrative": "x", "confidence_adjustment": 0, "additional_categories": ["not_a_real_category"]}'}
+    output = {
+        "text": '{"narrative": "x", "confidence_adjustment": 0, "additional_categories": ["not_a_real_category"]}'
+    }
 
     result = parse_llm_output(output)
 

@@ -20,9 +20,7 @@ from app.providers.registry import get_provider_registry
 def get_orchestrator() -> AnalysisOrchestrator:
     registry = EngineRegistry()
     registry.register(RiskEngine(provider_registry=get_provider_registry(), session_factory=SessionLocal))
-    registry.register(
-        TestIntelligenceEngine(provider_registry=get_provider_registry(), session_factory=SessionLocal)
-    )
+    registry.register(TestIntelligenceEngine(provider_registry=get_provider_registry(), session_factory=SessionLocal))
     registry.register(
         FailureIntelligenceEngine(provider_registry=get_provider_registry(), session_factory=SessionLocal)
     )
