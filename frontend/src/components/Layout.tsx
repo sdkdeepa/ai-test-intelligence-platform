@@ -22,6 +22,9 @@ export function Layout() {
           <NavLink to="/repositories" className="top-nav__link">
             Repositories
           </NavLink>
+          <NavLink to="/review-queue" className="top-nav__link">
+            Pending Approvals
+          </NavLink>
           <NavLink to="/review" className="top-nav__link">
             Human Review
           </NavLink>

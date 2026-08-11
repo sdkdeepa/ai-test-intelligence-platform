@@ -5,12 +5,16 @@ it back out.
 """
 
 import uuid
+from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_session_factory
+from app.governance.review_service import evaluate_and_maybe_create_review_request
 from app.orchestration.bootstrap import get_orchestrator
+from app.orchestration.engine import AnalysisResult
 from app.orchestration.orchestrator import AnalysisOrchestrator
 from app.orchestration.registry import EngineNotRegisteredError
 from app.persistence.database import get_session
@@ -58,9 +62,28 @@ def trigger_risk_analysis(
     payload: RiskAnalysisRequest,
     session: Session = Depends(get_session),
     orchestrator: AnalysisOrchestrator = Depends(get_orchestrator),
+    session_factory: Callable[[], Session] = Depends(get_session_factory),
 ) -> RiskAnalysisTriggered:
     if RepositoryRepository(session).get(repo_id) is None:
         raise HTTPException(status_code=404, detail="repository not found")
+
+    def _on_result(analysis_run_id: uuid.UUID, result: AnalysisResult) -> None:
+        # Sprint 13: governance runs for every completed risk assessment
+        # regardless of trigger, manual API calls included — not just
+        # webhook-originated ones — so the dashboard's pending-approvals
+        # view reflects every risk run that needs a human look, not only
+        # the ones that happened to arrive via GitHub. See
+        # governance/review_service.py's module docstring.
+        if result.status != "completed" or not isinstance(result.output, dict):
+            return
+        gov_session = session_factory()
+        try:
+            evaluate_and_maybe_create_review_request(
+                gov_session, analysis_run_id=analysis_run_id, repo_id=repo_id, risk_output=result.output
+            )
+            gov_session.commit()
+        finally:
+            gov_session.close()
 
     try:
         analysis_run_id = orchestrator.submit(
@@ -70,6 +93,7 @@ def trigger_risk_analysis(
             commit_sha=payload.commit_sha,
             pr_number=payload.pr_number,
             inputs={"diff": payload.diff},
+            on_result=_on_result,
         )
     except EngineNotRegisteredError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

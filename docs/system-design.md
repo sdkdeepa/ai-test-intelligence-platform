@@ -54,6 +54,16 @@ shows at a high level:
   is waiting on have arrived, not synchronously as part of the original webhook request/
   response cycle.
 
+**Implementation status (Sprint 13):** the diagram's final `POST status check + PR
+comment` step is no longer unconditional. Governance policy (architecture.md §12) is
+evaluated on the risk result first; if it triggers, what gets published is a `pending`
+status plus a "review required" comment instead — the diagram's success/failure publish
+only happens automatically when nothing triggers. When something does, the corresponding
+edges become a *separate* flow entirely, initiated later by a human decision, not by
+this sequence: `Human->>API: POST /review-queue/{id}/approve` (or `/reject`) ->
+`API->>DB: record decision + audit event` -> `API->>GH: POST final status + decision
+comment`.
+
 ## 2. Data Flow: CI Failure Analysis
 
 ```mermaid
@@ -93,6 +103,8 @@ erDiagram
     ANALYSIS_RUNS ||--o{ TEST_SUGGESTIONS : produces
     ANALYSIS_RUNS ||--o{ FLAKY_TEST_FINDINGS : produces
     ANALYSIS_RUNS }o--|| LLM_PROVIDER_CONFIGS : used
+    ANALYSIS_RUNS ||--o{ REVIEW_REQUESTS : gated_by
+    REVIEW_REQUESTS ||--o{ AUDIT_EVENTS : has
 
     REPOSITORIES {
         uuid id PK
@@ -181,6 +193,32 @@ erDiagram
         bool is_active
         jsonb config_json
     }
+    REVIEW_REQUESTS {
+        uuid id PK
+        uuid analysis_run_id FK
+        uuid repo_id FK
+        string status
+        jsonb reasons
+        jsonb risk_summary
+        string github_owner
+        string github_repo
+        string github_head_sha
+        int github_pr_number
+        string reviewer
+        text review_reason
+        timestamp created_at
+        timestamp decided_at
+    }
+    AUDIT_EVENTS {
+        uuid id PK
+        uuid review_request_id FK
+        uuid analysis_run_id FK
+        uuid repo_id FK
+        string event_type
+        string actor
+        jsonb payload
+        timestamp created_at
+    }
 ```
 
 **Notes:**
@@ -191,6 +229,14 @@ erDiagram
 - `test_suggestions.status` (`pending` / `accepted` / `rejected`) makes suggestion
   review an explicit workflow state rather than an implicit one, so acceptance-rate
   becomes a measurable signal on generation quality.
+- **`review_requests`** (Sprint 13) is mutable current-state — `status`, `reviewer`,
+  `review_reason`, `decided_at` are updated in place by a decision. `github_*` columns
+  are nullable and only populated for webhook-originated runs; see architecture.md §12.
+- **`audit_events`** (Sprint 13) is append-only by repository API design (no update/
+  delete method exists on `AuditEventRepository` at all — see architecture.md §12) —
+  the immutable history of how a `review_requests` row reached its current status, and
+  also records `policy_evaluated` events (`review_request_id NULL`) for runs where
+  governance ran but nothing triggered.
 - Schema is intentionally high-level here; exact column types, indexes, and constraints
   are defined when persistence code is implemented, not in this design doc.
 
@@ -211,6 +257,11 @@ All endpoints are versioned under `/api/v1`.
 | `GET` | `/repositories/{id}/flaky-tests` | List flaky test findings |
 | `POST` | `/webhooks/github` | GitHub PR event ingestion — **implemented, Sprint 12** |
 | `POST` | `/webhooks/ci` | CI test-run result ingestion — not yet implemented |
+| `GET` | `/review-queue` | List review requests (defaults to `status=pending`) — **implemented, Sprint 13** |
+| `GET` | `/review-queue/{id}` | Review request detail (incl. redacted risk_summary) |
+| `GET` | `/review-queue/{id}/audit-events` | Immutable audit trail for one review request |
+| `POST` | `/review-queue/{id}/approve` | Record an approval (reviewer, optional reason) |
+| `POST` | `/review-queue/{id}/reject` | Record a rejection (reviewer, optional reason) |
 
 **Boundary rules:**
 
@@ -262,3 +313,18 @@ All endpoints are versioned under `/api/v1`.
   configured) as concrete implementations. See
   [architecture.md §5](architecture.md#5-backend-module-organization)'s Sprint 12 status
   note for the full webhook flow this powers.
+- **`evaluate_risk_policy(risk_output) -> list[PolicyReason]`** (Sprint 13,
+  `governance/policy.py`): a pure function, no I/O — takes the same `AnalysisResult
+  .output` dict every other consumer of a risk result reads, returns every triggered
+  rule (empty list means auto-approve). `requires_review(risk_output) -> bool` is the
+  single-boolean convenience wrapper both call sites (`integrations/github/publisher.py`,
+  `api/risk.py`) actually branch on.
+- **`evaluate_and_maybe_create_review_request(session, ...) -> ReviewRequest | None`**
+  and **`decide_review(session, ...) -> ReviewRequest`** (Sprint 13,
+  `governance/review_service.py`): the only two entry points that write `ReviewRequest`/
+  `AuditEvent` rows — every caller (webhook publisher, manual-trigger API, review-queue
+  API) goes through these rather than constructing rows itself, so the redaction pass
+  and the "always write a `policy_evaluated` audit event" invariant can't be
+  accidentally skipped by a new call site. See
+  [architecture.md §12](architecture.md#12-governance-and-human-review) for the full
+  design.

@@ -15,6 +15,7 @@ and keeps the "long-form AI output" surface inside the platform's own
 reviewed UI, not scattered across PR history.
 """
 
+from app.governance.redaction import redact
 from app.integrations.github.client import CommitStatusState
 
 STATUS_CONTEXT = "ai-test-intelligence/risk"
@@ -185,3 +186,41 @@ def build_pr_comment(
             build_test_intelligence_comment(repo_id=repo_id, test_output=test_output, platform_url=platform_url)
         )
     return "\n\n---\n\n".join(sections)
+
+
+def build_review_required_comment(*, repo_id: str, reasons: list[str], platform_url: str) -> str:
+    """Posted (Sprint 13) instead of an immediate pass/fail status when
+    policy flags a run for human review — see
+    `integrations/github/publisher.py`. Deliberately doesn't repeat the
+    findings comment's content; it's a short note that a human decision is
+    now pending, plus why, plus where to go make that decision.
+    """
+    lines = [
+        "### AI Test Intelligence — Human Review Required",
+        "",
+        "This change was flagged for human review before its risk assessment can be treated as approved:",
+        "",
+    ]
+    lines.extend(f"- {reason.replace('_', ' ')}" for reason in reasons)
+    lines.append("")
+    lines.append(f"[Review in the platform dashboard]({platform_url}/review-queue)")
+    return "\n".join(lines)
+
+
+def build_decision_comment(*, decision: str, reviewer: str, reason: str | None) -> str:
+    """Posted when a reviewer approves/rejects via the review queue API
+    (`api/review.py`) for a request tied to a GitHub PR — closes the loop
+    the `review_required` comment opened. `reason` is free text a human
+    typed; redacted here (`governance/redaction.py`) the same as everything
+    else that reaches GitHub, in case it accidentally contains something
+    sensitive.
+    """
+    verb = "Approved" if decision == "approved" else "Rejected"
+    lines = [
+        "### AI Test Intelligence — Human Review Decision",
+        "",
+        f"**{verb}** by @{reviewer}",
+    ]
+    if reason:
+        lines.append(f"**Reason:** {redact(reason)}")
+    return "\n".join(lines)

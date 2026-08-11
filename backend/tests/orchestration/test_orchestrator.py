@@ -224,3 +224,154 @@ def test_explicit_correlation_and_trace_ids_are_passed_through(session_factory):
     context = engine.received_contexts[0]
     assert context.correlation_id == "my-corr"
     assert context.trace_id == "my-trace"
+
+
+def test_on_result_is_called_once_with_the_completed_result(session_factory):
+    engine = _RecordingEngine(result=AnalysisResult(status="completed", output={"risk_score": 0.5}))
+    registry = EngineRegistry()
+    registry.register(engine)
+    orchestrator = _make_orchestrator(session_factory, registry)
+    repo_id = _make_repo(session_factory)
+
+    received: list[tuple[uuid.UUID, AnalysisResult]] = []
+    analysis_run_id = orchestrator.submit(
+        repo_id=repo_id,
+        engine_type="risk",
+        trigger="pr",
+        on_result=lambda run_id, result: received.append((run_id, result)),
+    )
+
+    wait_until(lambda: len(received) == 1)
+    run_id, result = received[0]
+    assert run_id == analysis_run_id
+    assert result.status == "completed"
+    assert result.output == {"risk_score": 0.5}
+
+
+def test_on_result_is_called_with_a_failed_result_when_the_engine_returns_failed(session_factory):
+    engine = _RecordingEngine(result=AnalysisResult(status="failed", error="no test files found"))
+    registry = EngineRegistry()
+    registry.register(engine)
+    orchestrator = _make_orchestrator(session_factory, registry)
+    repo_id = _make_repo(session_factory)
+
+    received: list[AnalysisResult] = []
+    orchestrator.submit(
+        repo_id=repo_id, engine_type="risk", trigger="pr", on_result=lambda _run_id, result: received.append(result)
+    )
+
+    wait_until(lambda: len(received) == 1)
+    assert received[0].status == "failed"
+    assert received[0].error == "no test files found"
+
+
+def test_on_result_receives_a_synthesized_failed_result_when_the_engine_raises(session_factory):
+    """queue.py never sets `.result` when the worker thread's callable
+    raises — on_result's contract is "always exactly one AnalysisResult",
+    so the orchestrator must synthesize one rather than skip the callback.
+    """
+    registry = EngineRegistry()
+    registry.register(_RaisingEngine())
+    orchestrator = _make_orchestrator(session_factory, registry)
+    repo_id = _make_repo(session_factory)
+
+    received: list[AnalysisResult] = []
+    orchestrator.submit(
+        repo_id=repo_id, engine_type="risk", trigger="pr", on_result=lambda _run_id, result: received.append(result)
+    )
+
+    wait_until(lambda: len(received) == 1)
+    assert received[0].status == "failed"
+    assert "engine exploded" in received[0].error
+
+
+def test_on_result_receives_a_synthesized_failed_result_on_timeout(session_factory):
+    registry = EngineRegistry()
+    registry.register(_SlowEngine(delay=0.5))
+    orchestrator = _make_orchestrator(session_factory, registry)
+    repo_id = _make_repo(session_factory)
+
+    received: list[AnalysisResult] = []
+    orchestrator.submit(
+        repo_id=repo_id,
+        engine_type="risk",
+        trigger="pr",
+        timeout=0.05,
+        on_result=lambda _run_id, result: received.append(result),
+    )
+
+    wait_until(lambda: len(received) == 1, timeout=2.0)
+    assert received[0].status == "failed"
+    assert "timed out" in received[0].error
+
+
+def test_a_raising_on_result_callback_does_not_break_run_status_tracking(session_factory):
+    """A caller's completion hook (e.g. a GitHub publish call that fails) must
+    never take down the worker thread or prevent AnalysisRun.status from
+    still being persisted correctly.
+    """
+    engine = _RecordingEngine()
+    registry = EngineRegistry()
+    registry.register(engine)
+    orchestrator = _make_orchestrator(session_factory, registry)
+    repo_id = _make_repo(session_factory)
+
+    def _exploding_on_result(_run_id, _result):
+        raise RuntimeError("publish failed")
+
+    analysis_run_id = orchestrator.submit(
+        repo_id=repo_id, engine_type="risk", trigger="pr", on_result=_exploding_on_result
+    )
+
+    final_status = wait_until(
+        lambda: (
+            orchestrator.run_status(analysis_run_id) in ("completed", "failed")
+            and orchestrator.run_status(analysis_run_id)
+        )
+    )
+    assert final_status == "completed"
+
+
+def test_on_result_is_not_called_when_not_provided(session_factory):
+    """Regression guard: submit() without on_result must behave exactly as
+    it did before Sprint 12 — no callback, no error.
+    """
+    engine = _RecordingEngine()
+    registry = EngineRegistry()
+    registry.register(engine)
+    orchestrator = _make_orchestrator(session_factory, registry)
+    repo_id = _make_repo(session_factory)
+
+    analysis_run_id = orchestrator.submit(repo_id=repo_id, engine_type="risk", trigger="pr")
+
+    final_status = wait_until(
+        lambda: (
+            orchestrator.run_status(analysis_run_id) in ("completed", "failed")
+            and orchestrator.run_status(analysis_run_id)
+        )
+    )
+    assert final_status == "completed"
+
+
+def test_submit_redacts_secret_material_in_inputs_before_the_engine_sees_it(session_factory):
+    """Sprint 13: `inputs` is redacted centrally in submit(), before
+    AnalysisContext is built — so every engine gets this automatically. See
+    governance/redaction.py's module docstring for why this targets secret
+    *values*, not the security-related identifiers heuristics rely on.
+    """
+    engine = _RecordingEngine()
+    registry = EngineRegistry()
+    registry.register(engine)
+    orchestrator = _make_orchestrator(session_factory, registry)
+    repo_id = _make_repo(session_factory)
+
+    fake_secret = (
+        "wJalrXUtnFEMI/K7MDENG/" + "bPxRfiCYEXAMPLEKEY"
+    )  # split to avoid tripping secret scanners on a fake value
+    diff_with_secret = f'diff --git a/x b/x\n+aws_secret_access_key = "{fake_secret}"\n'
+    orchestrator.submit(repo_id=repo_id, engine_type="risk", trigger="pr", inputs={"diff": diff_with_secret})
+
+    wait_until(lambda: len(engine.received_contexts) == 1)
+    context = engine.received_contexts[0]
+    assert "wJalrXUtnFEMI" not in context.inputs["diff"]
+    assert "[REDACTED]" in context.inputs["diff"]

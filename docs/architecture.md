@@ -19,6 +19,13 @@ analysis → persistence → API → dashboard. That shared spine is what makes 
 *platform* rather than three unrelated scripts — a new analysis capability is a new
 "engine" plugged into the same orchestration and provider layers, not a new system.
 
+A fourth, cross-cutting concern sits on top of all three: **governance.** AI-generated
+findings are advisory by construction, not self-executing — a risk assessment that meets
+certain conditions (high release risk, low confidence, authentication/authorization or
+breaking-change categories, security-sensitive findings, insufficient evidence) requires
+an explicit human decision before it can be treated as an approved signal anywhere
+outside the platform's own dashboard. See §12.
+
 **Primary integration point:** GitHub Actions / pull requests. A PR is the natural unit
 of "what changed" and the natural place to surface risk findings and test suggestions
 before merge. CI webhook ingestion covers the failure-triage capability independently of
@@ -171,6 +178,7 @@ ai-test-intelligence-platform/
 │   │   ├── ingestion/           # Diff parsing, GitHub PR webhook event normalization
 │   │   ├── integrations/
 │   │   │   └── github/           # GitHubClient abstraction, HMAC verification, PR comment/status publishing
+│   │   ├── governance/            # Policy rules, sensitive-data redaction, review-request/audit-event service
 │   │   ├── orchestration/       # TaskQueue interface + in-process implementation
 │   │   ├── analysis/
 │   │   │   ├── risk/            # Coverage/risk analyzer engine
@@ -209,7 +217,15 @@ ownership model.
   `observability/` (for logging) — a pure abstraction over the GitHub REST API (diff
   fetch, commit status, PR comments) plus HMAC signature verification, deliberately kept
   isolated the same way `providers/` is. `api/webhooks.py`, not this module, is what
-  calls the orchestrator — see its Sprint 12 status note below.
+  calls the orchestrator — see its Sprint 12 status note below. **Sprint 13 exception:**
+  `integrations/github/publisher.py` also depends on `governance/` and, transitively,
+  `persistence/` — see this section's Sprint 13 status note for why that's a deliberate
+  addition, not scope creep.
+- **`governance/`** depends on `persistence/` (to read/write `ReviewRequest`/
+  `AuditEvent`) and nothing else analysis-specific — it operates on the same
+  `AnalysisResult.output` dict shape every engine already produces, not on engine
+  internals. Both `integrations/github/publisher.py` and `api/risk.py` call into it; it
+  never calls back into either.
 - **`orchestration/`** depends on `analysis/` engines by interface only (each engine
   implements a common `AnalysisEngine.run(context) -> Result` contract). The
   orchestrator decides *when* and *in what order* engines run; it has no analysis logic
@@ -249,11 +265,25 @@ where Statuses works with a plain token — see `RestGitHubClient`'s docstring f
 full rationale; a GitHub App integration remains a natural later increment if richer
 Checks UI is ever needed.
 
+**Implementation status (Sprint 13):** governance and human review is live — see §12 for
+the full design. In one sentence: `governance/policy.py` evaluates every completed risk
+result against a fixed set of rules (thresholds configurable via
+`GovernancePolicySettings`/`GOVERNANCE_*` env vars); a triggered rule creates a
+`ReviewRequest` + an immutable `AuditEvent` (`governance/review_service.py`) instead of
+letting `integrations/github/publisher.py` publish an automatic success/failure commit
+status, and only `api/review.py`'s approve/reject endpoints — acting on a persisted human
+decision — can publish that final status afterward. `AnalysisOrchestrator.submit()` also
+gained a redaction pass over `inputs` this sprint (`governance/redaction.py`), applied
+before any engine (not just risk) ever sees the content, independent of governance's
+review-gating logic.
+
 ## 6. Frontend Organization
 
 - **`pages/`** — one page per top-level dashboard view: repository overview, risk
-  findings, test suggestions, flaky test history. Pages compose components and own data
-  fetching via `state/`.
+  findings, test suggestions, flaky test history, and (Sprint 13) the review queue
+  (`ReviewQueuePage`) at `/review-queue`, listing every `ReviewRequest` with
+  `status=pending` across all repositories with inline approve/reject. Pages compose
+  components and own data fetching via `state/`.
 - **`components/`** — presentational, no direct API calls. Receive data and callbacks as
   props.
 - **`api-client/`** — the only module that knows the API's URL shape and payload
@@ -379,8 +409,10 @@ Two scoping decisions worth recording:
   is wrapped so a failure (missing key, unreachable, disabled) never fails the request
   it's attached to, and normal CI runs with it disabled and no credentials.
 - **OpenTelemetry tracing** across ingestion → orchestration → provider call →
-  persistence, and **automated sensitive-content redaction rules**, remain deferred —
-  not implemented this sprint.
+  persistence remains deferred — not implemented. **Sensitive-content redaction** is no
+  longer deferred: `governance/redaction.py` (Sprint 13) redacts secret material from
+  every analysis run's `inputs` before an engine ever sees it, and from every
+  `AuditEvent.payload` before it's persisted — see §12.
 
 ## 9. Testing Strategy
 
@@ -407,6 +439,15 @@ Two scoping decisions worth recording:
   client against an `httpx.MockTransport`, and `PRAnalysisPublisher`'s completion-
   coordination logic (both orderings of risk/test-intelligence completion, failure
   paths, duplicate-callback safety) directly, without going through HTTP.
+- **Governance tests (Sprint 13)**: `tests/governance/` covers `policy.py` (every rule,
+  each threshold's boundary, the `insufficient_evidence` conditional logic, the global
+  kill-switch) and `redaction.py` (each secret pattern, plus an explicit "security
+  keywords survive redaction" check) as pure-function unit tests with no I/O;
+  `test_review_service.py` covers `ReviewRequest`/`AuditEvent` creation, the decision
+  workflow, and the "cannot decide twice" invariant against a real in-memory SQLite
+  session. `tests/api/test_webhooks.py` and `test_review_queue.py` cover the two
+  trigger paths end-to-end (webhook and manual), including the full
+  webhook → pending → approve/reject → GitHub-publish loop.
 
 ## 10. CI/CD Strategy
 
@@ -439,6 +480,99 @@ deployment target (container platform vs. serverless), a distributed task queue
 it, CI webhook ingestion (the failure-intelligence-triggering half of the ingestion
 diagram in §2 — GitHub PR ingestion landed in Sprint 12, CI ingestion has not), a
 GitHub App integration (§5's Sprint 12 status note explains why the Statuses API was
-used instead for now), and a per-repository configurable risk-gating policy (Sprint 12's
-`commit_status_state` hardcodes "only `block` fails the check" — see
-`integrations/github/comment.py`).
+used instead for now), and **per-repository** governance policy configuration —
+`GovernancePolicySettings` (§12) is process-wide, not scoped to a repository, so every
+registered repository shares the same risk-score/confidence thresholds and rule
+toggles today. (Sprint 12's original note here — "a per-repository configurable
+risk-gating policy... hardcodes 'only `block` fails the check'" — is superseded by
+Sprint 13: the gating conditions are now genuinely configurable, just not per-repo yet.)
+
+## 12. Governance and Human Review
+
+Sprint 13's requirement in one sentence: AI output must never silently become an
+approved operational engineering action. Concretely, in this platform, the only
+externally-visible "approved" signal that exists is a GitHub commit status turning
+green — there's no auto-merge, no deployment trigger, nothing else to gate. So the
+mechanism is specific: **the commit status can only resolve to `success` or `failure`
+two ways** — an ungated risk result publishing automatically (Sprint 12's original
+behavior, still true for the common case), or a human's explicit approve/reject decision
+publishing it afterward. There is no third path.
+
+**Policy evaluation (`governance/policy.py`).** A pure function,
+`evaluate_risk_policy(risk_output) -> list[PolicyReason]`, run against every completed
+Risk Engine result — `AnalysisResult.output`, the same dict `integrations/github/comment.py`
+already reads, not a new data shape. Six independent rules, each producing its own
+reason when triggered (a single result can trigger several at once):
+
+| Rule | Condition |
+|---|---|
+| `high_release_risk` | `release_recommendation == "block"`, or `risk_score` at or above a configurable threshold |
+| `elevated_release_risk` | `release_recommendation == "caution"` — off by default (see below) |
+| `low_confidence` | `confidence_score` below a configurable threshold |
+| `authentication_or_authorization_change` | categories include `authentication_authorization` |
+| `security_sensitive_finding` | categories include `security_sensitive_file` |
+| `breaking_api_or_schema_change` | categories include `api_contract` or `schema_database` |
+| `insufficient_evidence` | fewer than N evidence items recorded, **but only when the result also asserts elevated risk** (non-`proceed` recommendation or a high score) — a clean, low-risk "nothing found" result legitimately has nothing to cite evidence for; this rule exists to catch the opposite case, an unsupported risk claim, not to flag every quiet result |
+
+The category rules map directly onto `analysis/risk/heuristics.py`'s actual
+`RISK_CATEGORIES` vocabulary — not an independently invented taxonomy that could drift
+out of sync with what the engine produces. Thresholds and per-rule on/off toggles are
+configurable via `GovernancePolicySettings` (`GOVERNANCE_*` env vars,
+`governance/config.py`); the category mapping itself is a fixed module constant (see
+that settings class's docstring for why). `GOVERNANCE_ENABLED=false` is a global
+kill-switch — every result auto-approves, same as pre-Sprint-13 behavior — present for
+environments (local dev, CI) where the review workflow would just add friction.
+
+**Review queue (`ReviewRequest`, `persistence/models.py`).** Created only when at least
+one rule triggers. Mutable current-state: `status` (`pending` → `approved`/`rejected`),
+`reviewer`, `review_reason`, `decided_at` are updated in place by a decision — this
+table always answers "what's true right now", not "what happened". `github_owner`/
+`github_repo`/`github_head_sha`/`github_pr_number` are populated only when the
+triggering run came from a GitHub webhook (`integrations/github/publisher.py`); a
+manually-triggered run (`api/risk.py`) that trips policy still gets a `ReviewRequest` —
+visible in the dashboard — just with nothing to publish a decision back to.
+
+**Audit trail (`AuditEvent`, same module).** Append-only by *repository API design*, not
+a database trigger: `AuditEventRepository` (`persistence/repositories.py`) is
+deliberately not a `BaseRepository` subclass, and exposes only `record()` (insert) and
+`list_*()` (read) — there is no update or delete method to call in the first place.
+Every `AuditEvent.payload` is redacted before construction. Three event types today:
+`policy_evaluated` (written for *every* completed risk result, triggered or not — proof
+the gate actually ran, not just a record of when it fired), `review_required`, and
+`review_approved`/`review_rejected` (reviewer identity, reason, and timestamp — the
+concrete "reviewer identity / review reason / timestamp / immutable audit event"
+requirement).
+
+**Redaction (`governance/redaction.py`).** Pattern-based over secret *values* — AWS
+access/secret keys, GitHub/Slack tokens, PEM private-key blocks, bearer tokens, and
+generic `password`/`secret`/`token`/`api_key` assignments — never over the security
+*keywords* `analysis/risk/heuristics.py` and `analysis/test_intelligence/heuristics.py`
+match on to detect risk signals in the first place; blanking out the word "password"
+would silently defeat the platform's own risk detection, so redaction only ever removes
+things that look like actual secret material, leaving identifiers and surrounding code
+structure untouched. Two call sites: `AnalysisOrchestrator.submit()` redacts every
+string in `inputs` before `AnalysisContext` is built — before any engine can embed it
+into an LLM prompt — and `governance/review_service.py` redacts every `AuditEvent.payload`
+before insert, independently (an audit event can be constructed from data that never
+went through `submit()`, e.g. a reviewer's free-text `review_reason`).
+
+**The publish-gating mechanism (`integrations/github/publisher.py`).** When a risk
+result arrives, `PRAnalysisPublisher` evaluates governance *before* deciding what to
+publish. No rule triggered: unchanged Sprint 12 behavior, publish success/failure
+immediately. A rule triggers: publish a `pending` status (never success or failure) plus
+a short "human review required" comment naming the triggered rules and linking to
+`/review-queue/{id}` — and stop. The ordinary findings comment (risk summary +
+recommended tests) is *not* posted in this case; the review-required comment replaces
+it, not precedes it, so a reviewer sees one comment, not two. If governance itself fails
+to persist (a database error mid-write), the result is treated the same as a failed risk
+run — an `error` status, never a silent success — because a governance write failure
+must not be indistinguishable from "nothing to review."
+
+**Closing the loop (`api/review.py`).** `POST /api/v1/review-queue/{id}/approve` and
+`/reject` are the only other code path that can publish a final success/failure commit
+status, and only as the direct, synchronous result of `governance/review_service.py`'s
+`decide_review()` having already durably recorded the decision — GitHub is a downstream
+notification of that decision, not the source of truth for it. A review request can be
+decided exactly once (`ReviewAlreadyDecidedError` on a second attempt) — a decision, once
+made, is final, the same principle the audit trail's immutability is built on.
+
