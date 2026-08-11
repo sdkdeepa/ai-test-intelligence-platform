@@ -1,0 +1,28 @@
+.confidence-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 8rem;
+}
+
+.confidence-meter__track {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--tone-neutral-bg);
+  overflow: hidden;
+}
+
+.confidence-meter__fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+}
+
+.confidence-meter__value {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--text);
+  min-width: 2.5rem;
+  text-align: right;
+}

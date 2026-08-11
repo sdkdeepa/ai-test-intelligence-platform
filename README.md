@@ -28,12 +28,12 @@ engineering sprints — not a tutorial or hackathon project.
 ## Stack
 
 - **Backend:** Python 3.12, FastAPI, Pydantic Settings, structlog
-- **Frontend:** React, TypeScript, Vite
+- **Frontend:** React, TypeScript, Vite, React Router, TanStack Query
 - **LLM providers:** Anthropic Claude (primary), Mock (test/CI) — OpenAI not yet implemented
 - **Persistence:** PostgreSQL, SQLAlchemy 2.0, Alembic
 - **Observability:** Prometheus-compatible `/metrics`, structured JSON logging, optional
   LangSmith trace/experiment/dataset integration (disabled by default — see
-  `docs/architecture.md` §8)
+  `docs/architecture.md`)
 - **CI/CD:** GitHub Actions — not yet implemented
 
 ## Getting Started
@@ -44,8 +44,10 @@ Requires Python 3.12+, Node 22+, and (optionally) Docker.
 cp .env.example .env
 make install     # backend venv + dependencies, frontend npm dependencies
 make backend     # run the API at http://localhost:8000 (see /health)
-make frontend    # run the dashboard dev server (separate terminal)
+make frontend    # run the dashboard dev server (separate terminal) — http://localhost:5173
 make test        # run backend tests
+make test-frontend  # run frontend component tests (Vitest)
+make e2e         # run Playwright e2e tests (starts its own backend + frontend)
 ```
 
 Or via Docker:

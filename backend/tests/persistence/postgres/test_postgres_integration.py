@@ -8,6 +8,16 @@ the `postgres` service from docker-compose.yml to be up:
         DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/ai_test_intelligence \\
         .venv/bin/pytest tests/persistence/postgres -v -m postgres
 
+DATABASE_URL only needs to reach the Postgres *server* — conftest.py's
+`test_database_url` fixture creates a uniquely-named, disposable database for
+the test session and every test in this file runs against that, never
+against the database DATABASE_URL itself names. That's deliberate: this
+suite previously ran directly against whatever database DATABASE_URL named,
+and this exact example command pointed it at `ai_test_intelligence` — the
+same database the development server uses — which let manually-created rows
+from exercising the dashboard leak into these tests. See conftest.py's
+module docstring for the full incident.
+
 These exist to cover what the SQLite unit tests structurally can't: Alembic
 migrations running against the real target dialect, FK constraint
 enforcement (SQLite doesn't enforce these without an extra pragma), and a
@@ -59,13 +69,6 @@ EXPECTED_TABLES = {
 }
 
 
-def _database_url() -> str:
-    url = os.environ.get("DATABASE_URL")
-    if not url:
-        pytest.skip("DATABASE_URL must point at the docker-compose postgres service")
-    return url
-
-
 def _public_tables(engine) -> set[str]:
     with engine.connect() as conn:
         return {
@@ -77,17 +80,17 @@ def _public_tables(engine) -> set[str]:
 
 
 @pytest.fixture(scope="module")
-def alembic_config() -> Config:
+def alembic_config(test_database_url: str) -> Config:
     cfg = Config(str(BACKEND_DIR / "alembic.ini"))
     cfg.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
-    cfg.set_main_option("sqlalchemy.url", _database_url())
+    cfg.set_main_option("sqlalchemy.url", test_database_url)
     return cfg
 
 
 @pytest.fixture(scope="module")
-def migrated_engine(alembic_config):
+def migrated_engine(alembic_config, test_database_url: str):
     command.upgrade(alembic_config, "head")
-    engine = build_engine(_database_url())
+    engine = build_engine(test_database_url)
     yield engine
     engine.dispose()
 

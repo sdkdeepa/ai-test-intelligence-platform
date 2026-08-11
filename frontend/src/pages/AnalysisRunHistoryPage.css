@@ -1,0 +1,20 @@
+.run-row__toggle {
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.data-table--nested {
+  margin-top: 0.5rem;
+  background: var(--code-bg);
+  border-radius: 6px;
+}
+
+.data-table--nested th,
+.data-table--nested td {
+  padding: 0.4rem 0.6rem;
+}

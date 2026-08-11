@@ -1,0 +1,77 @@
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+}
+
+.top-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.top-nav__brand {
+  font-weight: 600;
+  color: var(--text-h);
+  font-size: 1rem;
+}
+
+.top-nav__links {
+  display: flex;
+  gap: 1.25rem;
+}
+
+.top-nav__link {
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.top-nav__link.active {
+  color: var(--accent);
+}
+
+.repo-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.6rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--code-bg);
+}
+
+.repo-nav__name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-h);
+}
+
+.repo-nav__tabs {
+  display: flex;
+  gap: 1rem;
+}
+
+.repo-nav__tab {
+  color: var(--text);
+  text-decoration: none;
+  font-size: 0.82rem;
+  padding: 0.2rem 0;
+  border-bottom: 2px solid transparent;
+}
+
+.repo-nav__tab.active {
+  color: var(--text-h);
+  border-bottom-color: var(--accent);
+}
+
+.app-content {
+  flex: 1;
+  padding: 1.5rem;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}

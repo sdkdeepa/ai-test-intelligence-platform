@@ -1,0 +1,17 @@
+.card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.25rem;
+  background: var(--bg);
+}
+
+.card + .card {
+  margin-top: 1rem;
+}
+
+.card__title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+  color: var(--text-h);
+}

@@ -132,3 +132,14 @@ def test_get_repository_by_id(client):
 def test_get_unknown_repository_returns_404(client):
     response = client.get("/api/v1/repositories/00000000-0000-0000-0000-000000000000")
     assert response.status_code == 404
+
+
+def test_list_repositories_returns_all_registered_repositories(client):
+    _create_repo(client, name="list-me-a")
+    _create_repo(client, name="list-me-b")
+
+    response = client.get("/api/v1/repositories")
+
+    assert response.status_code == 200
+    names = {r["name"] for r in response.json()}
+    assert {"list-me-a", "list-me-b"} <= names

@@ -1,0 +1,51 @@
+/* Shared, cross-page dashboard primitives: page headers and data tables.
+   Kept in one file rather than duplicated per page component. */
+
+.page-title {
+  font-size: 1.4rem;
+  margin: 0 0 0.2rem;
+}
+
+.page-subtitle {
+  color: var(--text);
+  opacity: 0.8;
+  font-size: 0.9rem;
+  margin-bottom: 1.25rem;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.data-table th {
+  text-align: left;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  opacity: 0.7;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.data-table td {
+  padding: 0.55rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-h);
+  vertical-align: top;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table__mono {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+
+.section-stack > * + * {
+  margin-top: 1.25rem;
+}
