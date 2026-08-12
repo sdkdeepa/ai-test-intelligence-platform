@@ -27,40 +27,7 @@ the loop for anything risky. That's what most of this platform's actual engineer
 effort went into, and it's the part a from-scratch AI coding demo usually skips.
 
 ## Architecture
-
-```mermaid
-flowchart LR
-    Dev[Developer] -->|opens/updates PR| GH[GitHub]
-    GH -->|webhook, HMAC-signed| API[FastAPI API Layer]
-    API --> Ing[Ingestion<br/>diff parsing, event normalization]
-    Ing --> Orch[Orchestrator<br/>TaskQueue, async execution]
-    Orch --> Risk[Risk Engine]
-    Orch --> TestIntel[Test Intelligence Engine]
-    Orch --> FailIntel[Failure Intelligence Engine]
-    Risk --> Prov[Provider Abstraction<br/>Anthropic / Mock]
-    TestIntel --> Prov
-    FailIntel --> Prov
-    Risk --> Gov[Governance<br/>policy rules, redaction]
-    Gov -->|no rule triggered| Pub[GitHub Publisher]
-    Gov -->|rule triggered| RQ[(Review Queue)]
-    Human[Human Reviewer] -->|approve/reject| RQ
-    RQ --> Pub
-    Pub -->|status check + PR comment| GH
-    Risk --> DB[(PostgreSQL)]
-    TestIntel --> DB
-    FailIntel --> DB
-    Gov --> DB
-    DB --> Dash[React Dashboard]
-    Dash -->|pending approvals,<br/>findings, suggestions| Human
-```
-
-One pipeline — ingestion → orchestration → provider-backed analysis → persistence → API
-→ dashboard — shared by all three analysis engines, with governance sitting on top of
-the risk-analysis path specifically (the only path that produces an externally-visible
-"approved" signal today). See [Architecture](docs/architecture.md) for the full component
-breakdown, module dependency rules, and per-sprint implementation-status notes, and
-[System Design](docs/system-design.md) for data flow sequence diagrams, the database
-schema, and the API surface.
+![architecture](/docs/screenshots/architecture.png)
 
 ## Core Capabilities
 
