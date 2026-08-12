@@ -149,3 +149,44 @@ def test_llm_invocation_request_id_is_optional(session):
 
     assert invocation.request_id is None
     assert invocation.estimated_cost is None
+
+
+def test_review_request_status_check_constraint_rejects_invalid_values(session):
+    """Sprint 14 hardening: `ReviewRequest.status` is now enforced at the DB
+    level, not just by governance/review_service.py's application-level
+    DECISION_STATES check — this proves the constraint is actually wired up
+    (via Base.metadata.create_all, same as production's Alembic migration
+    d37aa60d1471 does for a real database).
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    from app.persistence.models import AnalysisRun, ReviewRequest
+
+    repo = Repository(name="repo", url="https://x", default_branch="main")
+    session.add(repo)
+    session.flush()
+    run = AnalysisRun(repo_id=repo.id, trigger="pr", type="risk", status="completed")
+    session.add(run)
+    session.flush()
+
+    session.add(ReviewRequest(analysis_run_id=run.id, repo_id=repo.id, status="not_a_real_status"))
+    try:
+        session.flush()
+        raise AssertionError("expected an IntegrityError for an invalid status value")
+    except IntegrityError:
+        session.rollback()
+
+
+def test_review_request_accepts_each_valid_status(session):
+    from app.persistence.models import AnalysisRun, ReviewRequest
+
+    repo = Repository(name="repo", url="https://x", default_branch="main")
+    session.add(repo)
+    session.flush()
+    run = AnalysisRun(repo_id=repo.id, trigger="pr", type="risk", status="completed")
+    session.add(run)
+    session.flush()
+
+    for status in ("pending", "approved", "rejected"):
+        session.add(ReviewRequest(analysis_run_id=run.id, repo_id=repo.id, status=status))
+        session.flush()

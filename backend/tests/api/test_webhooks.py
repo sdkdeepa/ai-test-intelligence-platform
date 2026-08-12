@@ -206,6 +206,28 @@ def test_unregistered_repository_is_ignored(client):
     assert fake_client.comments == []
 
 
+def test_archived_repository_is_ignored(client):
+    """A decommissioned repository shouldn't trigger new analysis just
+    because GitHub still has a webhook configured for it — the same
+    "understood but not acted on" 202 the unregistered case gets, not a
+    404/error, since this is expected steady-state behavior for an
+    archived repo, not a client mistake.
+    """
+    fake_client = FakeGitHubClient(_SOURCE_DIFF)
+    _override_github(fake_client)
+    repo_id = _register_repo(client)
+    client.post(f"/api/v1/repositories/{repo_id}/archive")
+
+    response = _signed_post(client, load_webhook_payload("pull_request_opened"))
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["status"] == "ignored"
+    assert "archived" in body["reason"]
+    assert fake_client.statuses == []
+    assert fake_client.comments == []
+
+
 def test_malformed_pull_request_payload_returns_400(client):
     _override_github(FakeGitHubClient(_SOURCE_DIFF))
     _register_repo(client)

@@ -59,8 +59,11 @@ def trigger_failure_intelligence(
     session: Session = Depends(get_session),
     orchestrator: AnalysisOrchestrator = Depends(get_orchestrator),
 ) -> FailureIntelligenceTriggered:
-    if RepositoryRepository(session).get(repo_id) is None:
+    repo = RepositoryRepository(session).get(repo_id)
+    if repo is None:
         raise HTTPException(status_code=404, detail="repository not found")
+    if not repo.is_active:
+        raise HTTPException(status_code=409, detail="repository is archived and cannot accept new analysis")
 
     try:
         analysis_run_id = orchestrator.submit(

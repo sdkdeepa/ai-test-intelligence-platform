@@ -8,6 +8,7 @@ export interface Repository {
   name: string
   url: string
   default_branch: string
+  is_active: boolean
 }
 
 export interface RepositoryCreate {

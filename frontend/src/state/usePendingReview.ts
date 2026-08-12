@@ -18,7 +18,7 @@ export interface PendingReviewItem {
  * of registered repositories grew large.
  */
 export function usePendingReview() {
-  const repositories = useQuery({ queryKey: ['repositories'], queryFn: repositoriesApi.list })
+  const repositories = useQuery({ queryKey: ['repositories'], queryFn: () => repositoriesApi.list() })
 
   const suggestionQueries = useQueries({
     queries: (repositories.data ?? []).map((repo) => ({

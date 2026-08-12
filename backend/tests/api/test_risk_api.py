@@ -141,3 +141,123 @@ def test_list_repositories_returns_all_registered_repositories(client):
     assert response.status_code == 200
     names = {r["name"] for r in response.json()}
     assert {"list-me-a", "list-me-b"} <= names
+
+
+def test_list_repositories_orders_newest_first(client):
+    """Regression test: BaseRepository.list() has no ORDER BY at all — a
+    database gives no ordering guarantee without one. RepositoryRepository
+    overrides list() specifically because the Repository Overview dashboard
+    needs a stable, predictable order.
+    """
+    _create_repo(client, name="order-test-first")
+    _create_repo(client, name="order-test-second")
+    _create_repo(client, name="order-test-third")
+
+    names = [r["name"] for r in client.get("/api/v1/repositories").json()]
+    first = names.index("order-test-first")
+    second = names.index("order-test-second")
+    third = names.index("order-test-third")
+
+    # Newest first: third registered appears before second, which appears
+    # before first.
+    assert third < second < first
+
+
+def test_new_repository_is_active_by_default(client):
+    repo_id = _create_repo(client, name="new-repo")
+    response = client.get(f"/api/v1/repositories/{repo_id}")
+    assert response.json()["is_active"] is True
+
+
+def test_archive_repository_hides_it_from_default_list(client):
+    repo_id = _create_repo(client, name="to-be-archived")
+    assert any(r["id"] == repo_id for r in client.get("/api/v1/repositories").json())
+
+    archive_response = client.post(f"/api/v1/repositories/{repo_id}/archive")
+    assert archive_response.status_code == 200
+    assert archive_response.json()["is_active"] is False
+
+    active_list = client.get("/api/v1/repositories").json()
+    assert not any(r["id"] == repo_id for r in active_list)
+
+
+def test_archived_repository_still_visible_with_include_archived(client):
+    repo_id = _create_repo(client, name="archived-but-visible")
+    client.post(f"/api/v1/repositories/{repo_id}/archive")
+
+    full_list = client.get("/api/v1/repositories?include_archived=true").json()
+    assert any(r["id"] == repo_id and r["is_active"] is False for r in full_list)
+
+
+def test_archived_repository_still_reachable_by_direct_id(client):
+    """Archiving hides a repo from the default list, not from direct access
+    — a reviewer following an old link to a now-archived repo's detail page
+    should still see it, not get a 404.
+    """
+    repo_id = _create_repo(client, name="archived-direct-access")
+    client.post(f"/api/v1/repositories/{repo_id}/archive")
+
+    response = client.get(f"/api/v1/repositories/{repo_id}")
+    assert response.status_code == 200
+    assert response.json()["is_active"] is False
+
+
+def test_archive_is_idempotent(client):
+    repo_id = _create_repo(client, name="archive-twice")
+    first = client.post(f"/api/v1/repositories/{repo_id}/archive")
+    second = client.post(f"/api/v1/repositories/{repo_id}/archive")
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["is_active"] is False
+
+
+def test_unarchive_repository_restores_it_to_the_default_list(client):
+    repo_id = _create_repo(client, name="unarchive-me")
+    client.post(f"/api/v1/repositories/{repo_id}/archive")
+    assert not any(r["id"] == repo_id for r in client.get("/api/v1/repositories").json())
+
+    unarchive_response = client.post(f"/api/v1/repositories/{repo_id}/unarchive")
+    assert unarchive_response.status_code == 200
+    assert unarchive_response.json()["is_active"] is True
+    assert any(r["id"] == repo_id for r in client.get("/api/v1/repositories").json())
+
+
+def test_archive_unknown_repository_returns_404(client):
+    import uuid
+
+    response = client.post(f"/api/v1/repositories/{uuid.uuid4()}/archive")
+    assert response.status_code == 404
+
+
+def test_triggering_analysis_on_an_archived_repository_is_rejected(client):
+    repo_id = _create_repo(client, name="archived-no-new-analysis")
+    client.post(f"/api/v1/repositories/{repo_id}/archive")
+
+    response = client.post(f"/api/v1/repositories/{repo_id}/risk-analysis", json={"diff": "diff --git a/x b/x\n+y\n"})
+    assert response.status_code == 409
+
+
+def test_create_repository_rejects_empty_name(client):
+    response = client.post("/api/v1/repositories", json={"name": "", "url": "https://github.com/x/y"})
+    assert response.status_code == 422
+
+
+def test_create_repository_rejects_empty_url(client):
+    response = client.post("/api/v1/repositories", json={"name": "x", "url": ""})
+    assert response.status_code == 422
+
+
+def test_trigger_risk_analysis_rejects_empty_diff(client):
+    """Sprint 14 hardening: an empty diff previously passed validation and
+    would have silently triggered a whole analysis run with nothing to
+    analyze.
+    """
+    repo_id = _create_repo(client)
+    response = client.post(f"/api/v1/repositories/{repo_id}/risk-analysis", json={"diff": ""})
+    assert response.status_code == 422
+
+
+def test_trigger_risk_analysis_rejects_oversized_diff(client):
+    repo_id = _create_repo(client)
+    response = client.post(f"/api/v1/repositories/{repo_id}/risk-analysis", json={"diff": "x" * 2_000_001})
+    assert response.status_code == 422

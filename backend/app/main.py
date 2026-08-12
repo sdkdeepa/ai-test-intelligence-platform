@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.analysis_runs import router as analysis_runs_router
 from app.api.failure_intelligence import router as failure_intelligence_router
@@ -77,6 +78,30 @@ def create_app() -> FastAPI:
     app.include_router(analysis_runs_router)
     app.include_router(webhooks_router)
     app.include_router(review_router)
+
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        """Sprint 14 hardening: without this, an unhandled exception in a
+        route (a bug, an unexpected DB error, anything not already turned
+        into an `HTTPException`) falls through to Starlette's own default
+        handler — which is fine in outline (it does return a 500, the
+        process doesn't crash) but logs nothing through this app's own
+        structured logger and, depending on how the ASGI server is run,
+        can leak a raw traceback into the response body. This handler
+        logs the exception with full context (still server-side only,
+        `exc_info=True`) and always returns the same generic body
+        regardless of what actually broke — the distinction between "a bug"
+        and "a bug that leaks internals" matters even before there's an
+        auth model to worry about a wider attack surface.
+        """
+        logger.error(
+            "unhandled_exception",
+            path=request.url.path,
+            method=request.method,
+            exc_info=True,
+        )
+        return JSONResponse(status_code=500, content={"detail": "internal server error"})
+
     return app
 
 

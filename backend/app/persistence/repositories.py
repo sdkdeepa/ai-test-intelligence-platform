@@ -65,6 +65,27 @@ class BaseRepository(Generic[ModelT]):
 class RepositoryRepository(BaseRepository[RepositoryModel]):
     model = RepositoryModel
 
+    def list(self, *, include_archived: bool = False) -> list[RepositoryModel]:
+        # Overrides BaseRepository.list()'s unordered `select(self.model)` —
+        # Postgres gives no ordering guarantee at all without an explicit
+        # ORDER BY (it happens to often resemble insertion order for a
+        # small, append-only table, but that's an implementation detail,
+        # not a contract — a vacuum, an index scan plan change, or just
+        # enough rows can silently reorder it). Newest-first is what the
+        # Repository Overview dashboard actually wants; other entities keep
+        # the base class's unordered list() since none of their callers
+        # currently depend on a particular order.
+        #
+        # Archived repositories (is_active=False) are excluded by default —
+        # the whole point of archiving is that a decommissioned repo stops
+        # cluttering the default view (see Repository's docstring in
+        # models.py). `include_archived=True` is what the "show archived"
+        # toggle in the dashboard uses.
+        stmt = select(RepositoryModel).order_by(RepositoryModel.created_at.desc())
+        if not include_archived:
+            stmt = stmt.where(RepositoryModel.is_active.is_(True))
+        return list(self.session.scalars(stmt))
+
     def get_by_url(self, url: str) -> RepositoryModel | None:
         return self.session.scalar(select(RepositoryModel).where(RepositoryModel.url == url))
 

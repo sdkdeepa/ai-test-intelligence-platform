@@ -8,7 +8,7 @@ import uuid
 from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_session_factory
@@ -24,7 +24,13 @@ router = APIRouter(prefix="/api/v1/repositories", tags=["risk"])
 
 
 class RiskAnalysisRequest(BaseModel):
-    diff: str
+    # Sprint 14 hardening: previously an unconstrained `str` — an empty diff
+    # would silently trigger a whole analysis run with nothing to analyze,
+    # and there was no upper bound at all (a pathologically large body could
+    # tie up a worker thread and inflate provider token cost with no
+    # guardrail). 2MB is generous relative to any realistic PR diff while
+    # still being a real limit, not just documentation of intent.
+    diff: str = Field(min_length=1, max_length=2_000_000)
     commit_sha: str | None = None
     pr_number: int | None = None
     trigger: str = "manual"
@@ -64,8 +70,11 @@ def trigger_risk_analysis(
     orchestrator: AnalysisOrchestrator = Depends(get_orchestrator),
     session_factory: Callable[[], Session] = Depends(get_session_factory),
 ) -> RiskAnalysisTriggered:
-    if RepositoryRepository(session).get(repo_id) is None:
+    repo = RepositoryRepository(session).get(repo_id)
+    if repo is None:
         raise HTTPException(status_code=404, detail="repository not found")
+    if not repo.is_active:
+        raise HTTPException(status_code=409, detail="repository is archived and cannot accept new analysis")
 
     def _on_result(analysis_run_id: uuid.UUID, result: AnalysisResult) -> None:
         # Sprint 13: governance runs for every completed risk assessment

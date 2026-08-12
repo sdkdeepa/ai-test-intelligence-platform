@@ -15,7 +15,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.governance.review_service import (
@@ -86,8 +86,12 @@ class AuditEventOut(BaseModel):
 
 
 class ReviewDecisionRequest(BaseModel):
-    reviewer: str
-    reason: str | None = None
+    # Sprint 14 hardening: previously an unconstrained `str` — an empty
+    # reviewer identity would pass validation and get persisted onto both
+    # the ReviewRequest and its AuditEvent, defeating the point of recording
+    # who made the decision.
+    reviewer: str = Field(min_length=1, max_length=200)
+    reason: str | None = Field(default=None, max_length=5000)
 
 
 @router.get("", response_model=list[ReviewRequestOut])

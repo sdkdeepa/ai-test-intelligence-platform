@@ -117,6 +117,14 @@ async def github_webhook(
     if repo is None:
         log.info("github_webhook_ignored", reason="repository not registered")
         return WebhookAck(status="ignored", reason=f"repository '{event.repo_url}' is not registered with the platform")
+    if not repo.is_active:
+        # A repository intentionally left resolvable by get_by_url() even
+        # while archived (unlike list()'s default, which hides it) — the
+        # webhook still needs to look it up to know it exists and is
+        # archived, as distinct from never having been registered at all.
+        # An archived repo has no business triggering new analysis, though.
+        log.info("github_webhook_ignored", reason="repository archived")
+        return WebhookAck(status="ignored", reason=f"repository '{event.repo_url}' is archived")
 
     try:
         diff_text = github_client.get_pull_request_diff(event.owner, event.repo_name, event.pr_number)
