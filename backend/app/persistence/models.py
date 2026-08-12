@@ -10,7 +10,7 @@ scatter that without adding isolation (see architecture.md §5 —
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import ForeignKey, Numeric, Text
+from sqlalchemy import CheckConstraint, ForeignKey, Numeric, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON, Uuid
 
@@ -26,12 +26,33 @@ def _utcnow() -> datetime:
 
 
 class Repository(Base):
+    """`url` is unique (Sprint 14 hardening) — `RepositoryRepository.get_by_url()`
+    (used by the GitHub webhook handler to resolve an incoming payload to a
+    registered repository, and now also by `create_repository`'s duplicate
+    check below) assumes at most one row per URL. Before this constraint
+    existed, two repositories registered with the same URL would make that
+    lookup raise `MultipleResultsFound` at the worst possible time — mid
+    webhook — rather than being rejected up front at registration.
+
+    `is_active` is a soft-delete flag, not a hard `DELETE` — deliberately.
+    A repository accumulates `AnalysisRun`/`RiskFinding`/`ReviewRequest`/
+    `AuditEvent` rows that reference it by FK; hard-deleting the row would
+    either cascade-destroy that history (directly contradicting the
+    immutable-audit-trail guarantee `AuditEvent` exists for — see
+    `docs/architecture.md` §12) or leave orphaned rows behind. Archiving
+    (`api/repositories.py`'s `/archive` endpoint) just flips this flag:
+    the repository disappears from the default list view and stops
+    accepting new webhook-triggered analysis (`api/webhooks.py` checks it),
+    but every row that already references it stays intact and queryable.
+    """
+
     __tablename__ = "repositories"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
     name: Mapped[str] = mapped_column(nullable=False)
-    url: Mapped[str] = mapped_column(nullable=False)
+    url: Mapped[str] = mapped_column(nullable=False, unique=True)
     default_branch: Mapped[str] = mapped_column(nullable=False)
+    is_active: Mapped[bool] = mapped_column(nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(default=_utcnow, nullable=False)
 
     commits: Mapped[list["Commit"]] = relationship(back_populates="repository")
@@ -311,6 +332,18 @@ class ReviewRequest(Base):
     """
 
     __tablename__ = "review_requests"
+    __table_args__ = (
+        # Sprint 14 hardening: `status` was application-validated only
+        # (governance/review_service.py's DECISION_STATES) through Sprint 13.
+        # A DB-level CHECK closes the gap for anything that writes to this
+        # table outside that code path (a future migration script, a manual
+        # fix, direct SQL) — the same class of gap the other status columns
+        # in this schema (test_runs.status, analysis_runs.status,
+        # test_suggestions.status) still have; see docs/architecture.md §13
+        # for why only this one was closed this sprint rather than all of
+        # them at once.
+        CheckConstraint("status IN ('pending', 'approved', 'rejected')", name="ck_review_requests_status"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_new_uuid)
     analysis_run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("analysis_runs.id"), nullable=False, index=True)

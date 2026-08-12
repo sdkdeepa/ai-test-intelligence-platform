@@ -576,3 +576,69 @@ notification of that decision, not the source of truth for it. A review request 
 decided exactly once (`ReviewAlreadyDecidedError` on a second attempt) — a decision, once
 made, is final, the same principle the audit trail's immutability is built on.
 
+## 13. Sprint 14: Production Hardening Review
+
+A staff/principal-level audit against the standard checklist — module boundaries,
+dependency direction, error handling, retry logic, configuration, secret handling,
+Pydantic validation, database constraints, logging, observability, test coverage, API
+consistency, Docker, CI/CD, frontend error states, documentation — with two outcomes per
+finding: fixed now, or explicitly documented as a known gap (README's Production Gaps).
+No product features were added this sprint; every change below is either a correctness
+fix or a hardening measure to existing capability.
+
+**Verified clean, no changes needed:**
+- **Dependency direction** — `grep`-verified against the rules in §5: nothing in
+  `analysis/`, `persistence/`, `orchestration/`, or `providers/` imports from `api/`.
+  The layering diagram in §5 is accurate, not aspirational.
+- **Retry logic** — already fully delegated to the Anthropic SDK's own `max_retries`/
+  `timeout` (see `providers/anthropic.py`'s docstring); nothing to add.
+- **Secret handling in config** — already `SecretStr`-typed throughout
+  (`providers/config.py`, `integrations/github/config.py`); no plaintext secrets in
+  logs or settings reprs.
+- **No stray `print()` calls** — structured logging (`structlog`) used consistently
+  across the backend.
+
+**Fixed:**
+- **Missing DB constraint on `ReviewRequest.status`.** Was application-validated only
+  (`governance/review_service.py`'s `DECISION_STATES`). Added a `CheckConstraint`
+  (`status IN ('pending', 'approved', 'rejected')`) plus migration `d37aa60d1471`,
+  portable across SQLite and PostgreSQL via `batch_alter_table`.
+- **Missing uniqueness on `Repository.url` — a real latent bug, not just a hardening
+  nicety.** `RepositoryRepository.get_by_url()` (the webhook handler's lookup) always
+  assumed at most one row per URL; nothing enforced that. Two repositories registered
+  with the same URL could make that lookup raise `MultipleResultsFound` mid-webhook.
+  Added `unique=True` plus migration `749e9896a218`, and hardened
+  `create_repository` to turn the resulting `IntegrityError` (the race-condition case:
+  two concurrent requests both passing the pre-check before either commits) into the
+  same clean 409 the pre-check already returns for the common case.
+- **Weak Pydantic validation on write endpoints.** `RiskAnalysisRequest.diff`,
+  `RepositoryCreate.name`/`url`, and `ReviewDecisionRequest.reviewer` were all
+  unconstrained `str` fields — an empty diff would silently trigger a wasted analysis
+  run, and an empty reviewer identity would get persisted as "who approved this."
+  Added `Field(min_length=..., max_length=...)` constraints, including a 2MB cap on
+  diff size to bound worst-case memory/provider-token cost from a single request.
+- **No global unhandled-exception handler.** An uncaught exception in a route (not
+  already an `HTTPException`) fell through to Starlette's default handler — no
+  structured logging through this app's own logger, and a possible raw-traceback leak
+  into the response depending on how the ASGI server is run. Added an
+  `@app.exception_handler(Exception)` in `main.py` that logs with `exc_info=True` and
+  always returns the same generic `{"detail": "internal server error"}` body,
+  regardless of what actually broke.
+- **No Docker hardening.** Both Dockerfiles ran as root with no `HEALTHCHECK`. Added a
+  non-root user to each (`appuser` for the backend image; `node:*-slim`'s built-in
+  `node` user for the frontend) and a stdlib-only healthcheck for each (no `curl`/
+  `wget` added as a runtime dependency just for this).
+- **No frontend error boundary.** An uncaught render error anywhere in the component
+  tree crashed to a blank white screen. Added `components/ErrorBoundary.tsx` (the one
+  class component in an otherwise all-function-component codebase — React error
+  boundaries have no Hook equivalent) wrapping `<App />` in `main.tsx`, with a minimal
+  fallback UI and a reload action.
+
+**Documented as known gaps, not fixed this sprint** (see README's Production Gaps for
+the full list and rationale): no authentication/authorization model, no multi-tenancy,
+per-repository governance policy configuration, rate limiting, secrets-manager
+integration, OpenTelemetry tracing, CI webhook ingestion for raw test-run results,
+database backup/restore strategy, and CHECK constraints on the remaining status-enum
+columns (`test_runs.status`, `analysis_runs.status`, `test_suggestions.status`,
+`test_results.status`) beyond the one closed this sprint.
+

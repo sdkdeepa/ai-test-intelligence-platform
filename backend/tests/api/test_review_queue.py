@@ -136,3 +136,17 @@ def test_reason_is_optional_on_approve(client):
     response = client.post(f"/api/v1/review-queue/{review_request_id}/approve", json={"reviewer": "alice"})
     assert response.status_code == 200
     assert response.json()["review_reason"] is None
+
+
+def test_approve_rejects_empty_reviewer(client):
+    """Sprint 14 hardening: an empty reviewer identity previously passed
+    validation and would have been persisted onto the ReviewRequest and its
+    AuditEvent, defeating the point of recording who decided.
+    """
+    repo_id = _create_repo(client)
+    _trigger_risk_analysis(client, repo_id, "auth_change")
+    assert _wait_until(lambda: len(client.get("/api/v1/review-queue").json()) == 1)
+    review_request_id = client.get("/api/v1/review-queue").json()[0]["id"]
+
+    response = client.post(f"/api/v1/review-queue/{review_request_id}/approve", json={"reviewer": ""})
+    assert response.status_code == 422

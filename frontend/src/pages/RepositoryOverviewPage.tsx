@@ -5,13 +5,16 @@ import { Link } from 'react-router-dom'
 import { EmptyState, ErrorState, LoadingState } from '../components/AsyncState'
 import { Button, TextField } from '../components/form'
 import { Card } from '../components/Card'
-import { useCreateRepository, useRepositories } from '../state/useRepositories'
+import { useArchiveRepository, useCreateRepository, useRepositories, useUnarchiveRepository } from '../state/useRepositories'
 import { ApiError } from '../api-client/client'
 import './RepositoryOverviewPage.css'
 
 export function RepositoryOverviewPage() {
-  const { data: repositories, isLoading, isError } = useRepositories()
+  const [includeArchived, setIncludeArchived] = useState(false)
+  const { data: repositories, isLoading, isError } = useRepositories(includeArchived)
   const createRepository = useCreateRepository()
+  const archiveRepository = useArchiveRepository()
+  const unarchiveRepository = useUnarchiveRepository()
 
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
@@ -43,6 +46,15 @@ export function RepositoryOverviewPage() {
 
       <div className="repo-overview__grid">
         <Card title="Registered Repositories">
+          <label className="repo-overview__archive-toggle">
+            <input
+              type="checkbox"
+              checked={includeArchived}
+              onChange={(e) => setIncludeArchived(e.target.checked)}
+            />
+            Show archived repositories
+          </label>
+
           {isLoading && <LoadingState label="Loading repositories…" />}
           {isError && <ErrorState message="Failed to load repositories." />}
           {repositories && repositories.length === 0 && (
@@ -56,16 +68,41 @@ export function RepositoryOverviewPage() {
                   <th>URL</th>
                   <th>Default Branch</th>
                   <th />
+                  <th />
                 </tr>
               </thead>
               <tbody>
                 {repositories.map((repo) => (
-                  <tr key={repo.id}>
-                    <td>{repo.name}</td>
+                  <tr key={repo.id} className={repo.is_active ? undefined : 'repo-overview__row--archived'}>
+                    <td>
+                      {repo.name}
+                      {!repo.is_active && <span className="repo-overview__archived-badge">Archived</span>}
+                    </td>
                     <td className="data-table__mono">{repo.url}</td>
                     <td>{repo.default_branch}</td>
                     <td>
                       <Link to={`/repositories/${repo.id}/risk`}>Open</Link>
+                    </td>
+                    <td>
+                      {repo.is_active ? (
+                        <button
+                          type="button"
+                          className="repo-overview__archive-button"
+                          disabled={archiveRepository.isPending}
+                          onClick={() => archiveRepository.mutate(repo.id)}
+                        >
+                          Archive
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="repo-overview__archive-button"
+                          disabled={unarchiveRepository.isPending}
+                          onClick={() => unarchiveRepository.mutate(repo.id)}
+                        >
+                          Unarchive
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
