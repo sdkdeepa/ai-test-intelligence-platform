@@ -1,9 +1,8 @@
-# System Design
+# System design
 
-Companion to [architecture.md](architecture.md). This document covers data flow,
-database schema, and API boundaries in detail.
+Detailed request and data contracts for the implemented platform. See [Architecture](architecture.md) for component ownership.
 
-## 1. Data Flow: PR-Triggered Analysis
+## Pull-request analysis
 
 ```mermaid
 sequenceDiagram
@@ -34,61 +33,13 @@ sequenceDiagram
     GH-->>Dev: Check result visible on PR
 ```
 
-**Implementation status (Sprint 12):** live, with two refinements to what the diagram
-shows at a high level:
+The webhook handler verifies GitHub's signature and retrieves the diff. Analysis runs asynchronously; results may complete in either order. Policy can hold publication pending human review rather than publishing an automatic success status.
 
-- `API->>Ing: normalize event` and the diff itself are two separate steps in practice —
-  `app/ingestion/github_webhook.py` normalizes the webhook *payload* into a
-  `PullRequestWebhookEvent`; `app/api/webhooks.py` then fetches the PR's *diff* via
-  `GitHubClient.get_pull_request_diff()` (a second GitHub API call, since `pull_request`
-  webhook payloads don't embed the diff itself) before calling `Orch->>Risk` /
-  `Orch->>TestIntel`. Test Intelligence is only enqueued when
-  `diff_touches_non_test_source()` finds non-test source in the diff — not
-  unconditionally, as the diagram's `AnalysisRun(type=risk, test_intelligence)` might
-  imply.
-- `API->>GH: POST status check + PR comment` is really `Orch->>API`-adjacent, not
-  `API`-initiated: Risk and Test Intelligence run on independent background threads and
-  complete in no guaranteed order, so `AnalysisOrchestrator.submit()`'s `on_result`
-  completion hook (added this sprint) is what actually fires the publish, from
-  `integrations/github/publisher.py`'s `PRAnalysisPublisher` — once both results this PR
-  is waiting on have arrived, not synchronously as part of the original webhook request/
-  response cycle.
+## CI failure analysis
 
-**Implementation status (Sprint 13):** the diagram's final `POST status check + PR
-comment` step is no longer unconditional. Governance policy (architecture.md §12) is
-evaluated on the risk result first; if it triggers, what gets published is a `pending`
-status plus a "review required" comment instead — the diagram's success/failure publish
-only happens automatically when nothing triggers. When something does, the corresponding
-edges become a *separate* flow entirely, initiated later by a human decision, not by
-this sequence: `Human->>API: POST /review-queue/{id}/approve` (or `/reject`) ->
-`API->>DB: record decision + audit event` -> `API->>GH: POST final status + decision
-comment`.
+The failure-intelligence engine analyzes supplied logs and test results. Automatic ingestion of independent CI test-run webhooks is **not implemented**; the original design sequence should not be read as a working integration.
 
-## 2. Data Flow: CI Failure Analysis
-
-```mermaid
-sequenceDiagram
-    participant CI as CI Test Run
-    participant API as API Layer
-    participant Ing as Ingestion Service
-    participant Orch as Orchestrator
-    participant FailureIntel as Failure Intelligence Engine
-    participant Prov as Provider Abstraction
-    participant DB as PostgreSQL
-
-    CI->>API: POST /webhooks/ci (test results)
-    API->>Ing: normalize test run + results
-    Ing->>DB: persist TestRun, TestResults
-    Ing->>Orch: enqueue AnalysisRun(type=failure_intelligence)
-    Orch->>FailureIntel: run(context: failed TestResults)
-    FailureIntel->>DB: read historical TestResults for same TestCase
-    FailureIntel->>Prov: generate(failure intelligence prompt)
-    Prov-->>FailureIntel: LLMResponse (root cause hypotheses + rationale)
-    FailureIntel->>DB: write FlakyTestFindings / FailureFindings
-    Orch->>DB: mark AnalysisRun complete
-```
-
-## 3. Database Schema (High-Level)
+## Data model
 
 ```mermaid
 erDiagram
@@ -221,26 +172,9 @@ erDiagram
     }
 ```
 
-**Notes:**
+`analysis_runs` ties findings to provider/model execution. Review requests hold the current decision state; audit events retain the decision history. This diagram is a conceptual view; refer to migrations and models for the authoritative schema.
 
-- `analysis_runs` is the anchor entity for observability and cost accounting — every
-  engine invocation belongs to exactly one run, and every finding traces back to the run
-  (and therefore the provider/model) that produced it.
-- `test_suggestions.status` (`pending` / `accepted` / `rejected`) makes suggestion
-  review an explicit workflow state rather than an implicit one, so acceptance-rate
-  becomes a measurable signal on generation quality.
-- **`review_requests`** (Sprint 13) is mutable current-state — `status`, `reviewer`,
-  `review_reason`, `decided_at` are updated in place by a decision. `github_*` columns
-  are nullable and only populated for webhook-originated runs; see architecture.md §12.
-- **`audit_events`** (Sprint 13) is append-only by repository API design (no update/
-  delete method exists on `AuditEventRepository` at all — see architecture.md §12) —
-  the immutable history of how a `review_requests` row reached its current status, and
-  also records `policy_evaluated` events (`review_request_id NULL`) for runs where
-  governance ran but nothing triggered.
-- Schema is intentionally high-level here; exact column types, indexes, and constraints
-  are defined when persistence code is implemented, not in this design doc.
-
-## 4. API Boundaries
+## API boundaries
 
 All endpoints are versioned under `/api/v1`.
 
@@ -255,9 +189,7 @@ All endpoints are versioned under `/api/v1`.
 | `POST` | `/test-suggestions/{id}/accept` | Mark a suggestion accepted |
 | `POST` | `/test-suggestions/{id}/reject` | Mark a suggestion rejected |
 | `GET` | `/repositories/{id}/flaky-tests` | List flaky test findings |
-| `POST` | `/webhooks/github` | GitHub PR event ingestion — **implemented, Sprint 12** |
 | `POST` | `/webhooks/ci` | CI test-run result ingestion — not yet implemented |
-| `GET` | `/review-queue` | List review requests (defaults to `status=pending`) — **implemented, Sprint 13** |
 | `GET` | `/review-queue/{id}` | Review request detail (incl. redacted risk_summary) |
 | `GET` | `/review-queue/{id}/audit-events` | Immutable audit trail for one review request |
 | `POST` | `/review-queue/{id}/approve` | Record an approval (reviewer, optional reason) |
@@ -270,7 +202,6 @@ All endpoints are versioned under `/api/v1`.
   or a provider implementation directly.
 - Webhook endpoints are the only unauthenticated-by-default surface (secured instead by
   provider signature verification — GitHub's HMAC-SHA256 `X-Hub-Signature-256`, verified
-  against the raw request body by `integrations/github/signature.py`, Sprint 12) since
   they're called by external systems, not end users; every other endpoint sits behind
   whatever authentication model is adopted (deferred — see architecture.md §11).
 - All analysis-triggering endpoints return immediately with an `analysis_run_id` in
@@ -280,7 +211,7 @@ All endpoints are versioned under `/api/v1`.
   OpenAPI spec FastAPI generates automatically — the frontend's typed API client is
   intended to be generated from that spec rather than hand-synced.
 
-## 5. Module Contracts
+## Module contracts
 
 - **`AnalysisEngine` interface** (implemented by Risk, Test Intelligence, Failure
   Intelligence engines): `run(context: AnalysisContext) -> AnalysisResult`.
