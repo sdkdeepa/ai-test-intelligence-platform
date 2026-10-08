@@ -1,37 +1,8 @@
 # Architecture
 
-## 1. Product Definition
+This document describes implementation boundaries and engineering trade-offs. For setup and features, start with the [README](../README.md). For request sequences and data models, see [System design](system-design.md).
 
-The AI Test Intelligence Platform ingests a codebase, its test suite, and its CI test-run
-history, then applies LLM-backed analysis to answer three questions engineering teams
-routinely under-invest in tooling for:
-
-1. **Where is testing risk concentrated?** — coverage/risk scoring of code relative to
-   change frequency, complexity, and existing test coverage.
-2. **What tests should exist but don't?** — AI-generated test suggestions for
-   undertested or high-risk code paths.
-3. **Why did this test fail, and does it matter?** — AI-assisted triage of CI failures,
-   classifying them as regressions, flaky tests, or environment issues, and clustering
-   recurring flaky patterns over time.
-
-These three capabilities share one pipeline: ingestion → orchestration → provider-backed
-analysis → persistence → API → dashboard. That shared spine is what makes this a
-*platform* rather than three unrelated scripts — a new analysis capability is a new
-"engine" plugged into the same orchestration and provider layers, not a new system.
-
-A fourth, cross-cutting concern sits on top of all three: **governance.** AI-generated
-findings are advisory by construction, not self-executing — a risk assessment that meets
-certain conditions (high release risk, low confidence, authentication/authorization or
-breaking-change categories, security-sensitive findings, insufficient evidence) requires
-an explicit human decision before it can be treated as an approved signal anywhere
-outside the platform's own dashboard. See §12.
-
-**Primary integration point:** GitHub Actions / pull requests. A PR is the natural unit
-of "what changed" and the natural place to surface risk findings and test suggestions
-before merge. CI webhook ingestion covers the failure-triage capability independently of
-PR analysis.
-
-## 2. High-Level Architecture
+## High-Level Architecture
 
 ```mermaid
 flowchart TB
@@ -106,7 +77,7 @@ that feeds analysis and the status-check/PR-comment publish that closes the loop
 GitHub. CI webhook ingestion (the other half of this diagram's "webhook" arrow) remains
 future scope — see system-design.md §4's `/webhooks/ci` entry.
 
-## 3. Component Diagram
+## Component Diagram
 
 ```mermaid
 flowchart LR
@@ -164,48 +135,7 @@ repository pattern — adding a fourth engine later requires no change to the
 orchestrator, provider layer, or API contracts beyond registering the new engine and its
 result schema.
 
-## 4. Repository Layout
-
-```
-ai-test-intelligence-platform/
-├── README.md
-├── docs/
-│   ├── architecture.md
-│   └── system-design.md
-├── backend/
-│   ├── app/
-│   │   ├── api/                # FastAPI routers, request/response schemas, GitHub webhook endpoint
-│   │   ├── ingestion/           # Diff parsing, GitHub PR webhook event normalization
-│   │   ├── integrations/
-│   │   │   └── github/           # GitHubClient abstraction, HMAC verification, PR comment/status publishing
-│   │   ├── governance/            # Policy rules, sensitive-data redaction, review-request/audit-event service
-│   │   ├── orchestration/       # TaskQueue interface + in-process implementation
-│   │   ├── analysis/
-│   │   │   ├── risk/            # Coverage/risk analyzer engine
-│   │   │   ├── test_intelligence/ # Test Intelligence Engine
-│   │   │   ├── failure_intelligence/ # Failure Intelligence Engine
-│   │   │   └── prompts/          # Versioned prompt templates, per engine
-│   │   ├── providers/            # LLM provider abstraction + implementations
-│   │   ├── persistence/           # SQLAlchemy models, repositories
-│   │   └── observability/          # Logging, metrics, LangSmith tracing setup
-│   ├── migrations/              # Alembic migrations
-│   └── tests/
-├── frontend/
-│   ├── src/
-│   │   ├── pages/            # Route-level views (Repo overview, Risk, Suggestions, Flaky Tests)
-│   │   ├── components/        # Shared presentational components
-│   │   ├── api-client/         # Typed API client (generated or hand-written)
-│   │   └── state/               # Data-fetching/cache state (TanStack Query)
-│   └── e2e/                   # Playwright smoke tests
-└── .github/
-    └── workflows/             # ci.yml, integration.yml, e2e.yml, docker.yml, live-smoke.yml
-```
-
-This is a monorepo: backend and frontend evolve together, and a single PR can span both
-when a feature requires it, which matters for a project of this size and single-team
-ownership model.
-
-## 5. Backend Module Organization
+## Backend Module Organization
 
 - **`api/`** depends on `persistence/` (via repositories) and `orchestration/` (to
   enqueue analysis runs). It never imports `providers/` or engine internals directly —
@@ -277,7 +207,7 @@ gained a redaction pass over `inputs` this sprint (`governance/redaction.py`), a
 before any engine (not just risk) ever sees the content, independent of governance's
 review-gating logic.
 
-## 6. Frontend Organization
+## Frontend Organization
 
 - **`pages/`** — one page per top-level dashboard view: repository overview, risk
   findings, test suggestions, flaky test history, and (Sprint 13) the review queue
@@ -307,7 +237,7 @@ the provider/model/latency/token-usage detail `LLMInvocation` has captured since
 9) — both thin routes over repository methods that already existed. CORS is wide open
 (`allow_origins=["*"]`) since there's still no auth model to scope it against.
 
-## 7. Provider Abstraction Strategy
+## Provider Abstraction Strategy
 
 ```mermaid
 classDiagram
@@ -362,7 +292,7 @@ Two scoping decisions worth recording:
 
 `AnthropicProvider` and `OpenAIProvider` remain unimplemented, per Sprint 2 scope.
 
-## 8. Observability Strategy
+## Observability Strategy
 
 - **Structured logging**: JSON logs carrying `repo_id`, `analysis_run_id`, and a
   correlation ID threaded from ingestion through to persistence, so one run's full
@@ -414,80 +344,7 @@ Two scoping decisions worth recording:
   every analysis run's `inputs` before an engine ever sees it, and from every
   `AuditEvent.payload` before it's persisted — see §12.
 
-## 9. Testing Strategy
-
-- **Backend unit tests** (pytest): each module tested in isolation; analysis engines
-  tested exclusively against `MockProvider` so test runs are deterministic and free.
-- **Backend integration tests**: exercise ingestion → orchestration → persistence
-  end-to-end against a real (dockerized/testcontainers) PostgreSQL instance, still using
-  `MockProvider` for LLM calls.
-- **Provider contract tests**: a shared test suite run against every `LLMProvider`
-  implementation (including real ones) to guarantee interface compliance; the real
-  provider variants are gated behind a manual/opt-in CI job so normal PRs never spend
-  API budget or become flaky due to live network calls.
-- **API contract tests**: request/response shape validation per endpoint.
-- **Frontend**: component tests (Vitest + React Testing Library) once frontend code
-  exists; end-to-end (Playwright) deferred until there's a UI worth covering.
-- **GitHub webhook tests (Sprint 12)**: `tests/api/test_webhooks.py` drives the full
-  webhook -> signature verification -> orchestration -> engine -> publish flow through
-  FastAPI's TestClient, with a `FakeGitHubClient` (implementing the `GitHubClient`
-  interface) standing in for the real GitHub API — no live repository or network access
-  required, same "fake the boundary interface" pattern `MockProvider` uses for LLM
-  calls. `tests/integrations/github/` covers signature verification, comment/status
-  text building (including an explicit assertion that no full model output — raw
-  rationale text, generated test source — ever appears in what gets built), the REST
-  client against an `httpx.MockTransport`, and `PRAnalysisPublisher`'s completion-
-  coordination logic (both orderings of risk/test-intelligence completion, failure
-  paths, duplicate-callback safety) directly, without going through HTTP.
-- **Governance tests (Sprint 13)**: `tests/governance/` covers `policy.py` (every rule,
-  each threshold's boundary, the `insufficient_evidence` conditional logic, the global
-  kill-switch) and `redaction.py` (each secret pattern, plus an explicit "security
-  keywords survive redaction" check) as pure-function unit tests with no I/O;
-  `test_review_service.py` covers `ReviewRequest`/`AuditEvent` creation, the decision
-  workflow, and the "cannot decide twice" invariant against a real in-memory SQLite
-  session. `tests/api/test_webhooks.py` and `test_review_queue.py` cover the two
-  trigger paths end-to-end (webhook and manual), including the full
-  webhook → pending → approve/reject → GitHub-publish loop.
-
-## 10. CI/CD Strategy
-
-- **`ci.yml`**: Ruff lint, Ruff format check, mypy, and PyTest with coverage for the
-  backend; oxlint, Vitest, and a production build for the frontend. Runs on every push
-  and PR; required for merge.
-- **`integration.yml`**: spins up a PostgreSQL 16 service container, runs Alembic
-  migrations (upgrade to head, then a downgrade/upgrade round trip), and runs the
-  PostgreSQL integration suite against it. Required for merge.
-- **`e2e.yml`**: installs Playwright + Chromium and runs `frontend/e2e/` against a real
-  backend (MockProvider, disposable SQLite) and a real Vite dev server, both started by
-  Playwright itself. Required for merge.
-- **`docker.yml`**: builds the backend and frontend Docker images independently, then
-  validates `docker-compose.yml` (`docker compose config` + `docker compose build`).
-  Build-only — nothing is pushed to a registry yet; that remains deferred until the
-  platform has an actual deployment target (§11).
-- **`live-smoke.yml`**: manually triggered only (`workflow_dispatch`), runs the Anthropic
-  provider contract tests against the real API using an `ANTHROPIC_API_KEY` repository
-  secret. Never runs automatically, to keep normal CI free of external API cost and
-  flakiness — the only workflow in the repo permitted to spend real API budget.
-- Branch protection on `main` requires `ci.yml`, `integration.yml`, `e2e.yml`, and
-  `docker.yml` to pass.
-
-## 11. Deliberately Deferred
-
-To keep this document honest about scope, the following are acknowledged as future
-decisions, not oversights: authentication/authorization model, multi-tenancy,
-deployment target (container platform vs. serverless), a distributed task queue
-(Celery/Temporal) to replace the in-process orchestrator once real concurrency demands
-it, CI webhook ingestion (the failure-intelligence-triggering half of the ingestion
-diagram in §2 — GitHub PR ingestion landed in Sprint 12, CI ingestion has not), a
-GitHub App integration (§5's Sprint 12 status note explains why the Statuses API was
-used instead for now), and **per-repository** governance policy configuration —
-`GovernancePolicySettings` (§12) is process-wide, not scoped to a repository, so every
-registered repository shares the same risk-score/confidence thresholds and rule
-toggles today. (Sprint 12's original note here — "a per-repository configurable
-risk-gating policy... hardcodes 'only `block` fails the check'" — is superseded by
-Sprint 13: the gating conditions are now genuinely configurable, just not per-repo yet.)
-
-## 12. Governance and Human Review
+## Governance and Human Review
 
 Sprint 13's requirement in one sentence: AI output must never silently become an
 approved operational engineering action. Concretely, in this platform, the only
@@ -568,15 +425,7 @@ to persist (a database error mid-write), the result is treated the same as a fai
 run — an `error` status, never a silent success — because a governance write failure
 must not be indistinguishable from "nothing to review."
 
-**Closing the loop (`api/review.py`).** `POST /api/v1/review-queue/{id}/approve` and
-`/reject` are the only other code path that can publish a final success/failure commit
-status, and only as the direct, synchronous result of `governance/review_service.py`'s
-`decide_review()` having already durably recorded the decision — GitHub is a downstream
-notification of that decision, not the source of truth for it. A review request can be
-decided exactly once (`ReviewAlreadyDecidedError` on a second attempt) — a decision, once
-made, is final, the same principle the audit trail's immutability is built on.
-
-## 13. Sprint 14: Production Hardening Review
+## Sprint 14: Production Hardening Review
 
 A staff/principal-level audit against the standard checklist — module boundaries,
 dependency direction, error handling, retry logic, configuration, secret handling,
@@ -641,4 +490,3 @@ integration, OpenTelemetry tracing, CI webhook ingestion for raw test-run result
 database backup/restore strategy, and CHECK constraints on the remaining status-enum
 columns (`test_runs.status`, `analysis_runs.status`, `test_suggestions.status`,
 `test_results.status`) beyond the one closed this sprint.
-
