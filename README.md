@@ -165,3 +165,7 @@ Additional implementation decisions are in [Architecture](docs/architecture.md).
 This is a reference implementation, not a deployed multi-tenant service. It does not provide application-wide authentication/authorization; the API and permissive CORS settings are unsuitable for public exposure. Policy thresholds are process-wide, redaction is pattern-based rather than comprehensive, and the in-process queue loses unfinished jobs on restart. CI-result webhook ingestion and additional model providers remain future work.
 
 See [Architecture](docs/architecture.md) for the corresponding scaling and security trade-offs.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
